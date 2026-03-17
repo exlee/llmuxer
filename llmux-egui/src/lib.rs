@@ -20,9 +20,7 @@ impl LlmConfigWidget {
         Self {
             open: false,
             drafts,
-            selected: config
-                .map(|v| v.provider.clone())
-                .unwrap_or(Provider::default()),
+            selected: config.map(|v| v.provider.clone()).unwrap_or_default(),
         }
     }
 

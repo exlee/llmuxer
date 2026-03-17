@@ -1,86 +1,157 @@
 use serde::de::DeserializeOwned;
 
-use crate::error::LlmError;
+use crate::{attachment::Attachment, error::LlmError};
 
-/// The outcome of a cache-build attempt.
-#[derive(Debug)]
+/// The outcome of a [`CacheBuilder::build`] call.
+#[derive(Debug, Clone)]
 pub enum CacheResult {
-    /// A cache key that can be passed to [`LlmClient::query_with_cache`].
+    /// A cache key to pass via [`QueryBuilder::cache`].
     Key(String),
     /// This provider does not support caching.
     Unsupported,
-    /// Cache creation was attempted but failed.
-    Err(LlmError),
+}
+
+/// Fluent builder for executing a single query.
+///
+/// Constructed by [`LlmClient::query`]; not constructed directly.
+///
+/// The lifetime `'c` is tied to the `&'c dyn LlmClient` and the optional
+/// `&'c CacheResult`, keeping the builder object-safe with no heap allocation.
+pub struct QueryBuilder<'c> {
+    client: &'c dyn LlmClient,
+    prompt: String,
+    attachments: Vec<Attachment>,
+    cache: Option<&'c CacheResult>,
+    require_cache: bool,
+}
+
+impl<'c> QueryBuilder<'c> {
+    pub(crate) fn new(client: &'c dyn LlmClient, prompt: impl Into<String>) -> Self {
+        Self {
+            client,
+            prompt: prompt.into(),
+            attachments: Vec::new(),
+            cache: None,
+            require_cache: false,
+        }
+    }
+
+    /// Append a single attachment.
+    pub fn attachment(mut self, a: Attachment) -> Self {
+        self.attachments.push(a);
+        self
+    }
+
+    /// Append multiple attachments.
+    pub fn attachments(mut self, a: impl IntoIterator<Item = Attachment>) -> Self {
+        self.attachments.extend(a);
+        self
+    }
+
+    /// Attach an existing cache result. Ignored if `Unsupported` unless
+    /// [`require_cache`](Self::require_cache) is set.
+    pub fn cache(self, c: &'c CacheResult) -> Self {
+        Self {
+            cache: Some(c),
+            ..self
+        }
+    }
+
+    /// If set, [`run`](Self::run) returns
+    /// [`Err(LlmError::CacheRequired)`](LlmError::CacheRequired) when no
+    /// cache is provided or the cache is [`CacheResult::Unsupported`].
+    pub fn require_cache(self) -> Self {
+        Self {
+            require_cache: true,
+            ..self
+        }
+    }
+
+    /// Execute the query, returning raw response text.
+    pub fn run(self) -> Result<String, LlmError> {
+        if self.require_cache {
+            match self.cache {
+                None | Some(CacheResult::Unsupported) => return Err(LlmError::CacheRequired),
+                Some(CacheResult::Key(_)) => {}
+            }
+        }
+        self.client
+            .execute_query(&self.prompt, &self.attachments, self.cache)
+    }
+
+    /// Execute the query and deserialize the response as `T`.
+    pub fn json<T: DeserializeOwned>(self) -> Result<T, LlmError> {
+        let raw = self.run()?;
+        serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
+            reason: e.to_string(),
+            raw,
+        })
+    }
+}
+
+/// Fluent builder for pre-warming a cache entry.
+///
+/// Constructed by [`LlmClient::build_cache`]; not constructed directly.
+pub struct CacheBuilder<'c> {
+    client: &'c dyn LlmClient,
+    content: String,
+    attachments: Vec<Attachment>,
+}
+
+impl<'c> CacheBuilder<'c> {
+    pub(crate) fn new(client: &'c dyn LlmClient, content: impl Into<String>) -> Self {
+        Self {
+            client,
+            content: content.into(),
+            attachments: Vec::new(),
+        }
+    }
+
+    /// Append a single attachment to the cached content.
+    pub fn attachment(mut self, a: Attachment) -> Self {
+        self.attachments.push(a);
+        self
+    }
+
+    /// Append multiple attachments.
+    pub fn attachments(mut self, a: impl IntoIterator<Item = Attachment>) -> Self {
+        self.attachments.extend(a);
+        self
+    }
+
+    /// Submit the cache entry. Returns `Ok(CacheResult::Unsupported)` if the
+    /// provider does not support caching, `Err` on failure.
+    pub fn build(self) -> Result<CacheResult, LlmError> {
+        self.client.execute_cache(&self.content, &self.attachments)
+    }
 }
 
 /// Core synchronous client trait. Implement this to add a new provider.
 ///
-/// Only [`query`](LlmClient::query) is required. The caching methods have
-/// default implementations that fall back to a plain query.
+/// Use [`LlmClientBuilder`](crate::LlmClientBuilder) to construct provider
+/// clients. Call [`query`](LlmClient::query) or
+/// [`build_cache`](LlmClient::build_cache) to begin a fluent interaction.
 pub trait LlmClient: Send + Sync {
-    /// Send a prompt and return the raw response text.
-    fn query(&self, query: &str) -> Result<String, LlmError>;
+    /// Begin building a query against this client.
+    fn query(&self, prompt: &str) -> QueryBuilder<'_>;
 
-    /// Send a prompt using a previously built cache handle when available.
-    ///
-    /// Falls back to [`query`](LlmClient::query) when `cache` is
-    /// [`Unsupported`](CacheResult::Unsupported) or [`Err`](CacheResult::Err).
-    fn query_cached(&self, query: &str, cache: &CacheResult) -> Result<String, LlmError> {
-        match cache {
-            CacheResult::Key(id) => self.query_with_cache(query, id),
-            CacheResult::Unsupported | CacheResult::Err(_) => self.query(query),
-        }
-    }
+    /// Begin building a cache entry.
+    fn build_cache(&self, content: &str) -> CacheBuilder<'_>;
 
-    /// Send a prompt with an explicit cache identifier.
-    ///
-    /// The default implementation ignores `cache_id` and delegates to
-    /// [`query`](LlmClient::query). Providers that support context caching
-    /// override this to attach the identifier to the request.
-    fn query_with_cache(&self, query: &str, cache_id: &str) -> Result<String, LlmError> {
-        let _ = cache_id;
-        self.query(query)
-    }
+    /// Execute a query. Called by [`QueryBuilder::run`]; not intended to be
+    /// called directly.
+    fn execute_query(
+        &self,
+        prompt: &str,
+        attachments: &[Attachment],
+        cache: Option<&CacheResult>,
+    ) -> Result<String, LlmError>;
 
-    /// Pre-warm a cache entry with the given content.
-    ///
-    /// Returns [`CacheResult::Unsupported`] by default. Providers that support
-    /// server-side context caching (Anthropic, Gemini) override this to
-    /// register the content and return a [`CacheResult::Key`].
-    fn build_cache(&self, content: &str) -> CacheResult {
-        let _ = content;
-        CacheResult::Unsupported
-    }
+    /// Execute a cache build. Called by [`CacheBuilder::build`]; not intended
+    /// to be called directly.
+    fn execute_cache(
+        &self,
+        content: &str,
+        attachments: &[Attachment],
+    ) -> Result<CacheResult, LlmError>;
 }
-
-/// Extension trait providing typed JSON helpers.
-///
-/// Blanket-implemented for all [`LlmClient`] values. Not object-safe due to
-/// generic return types; use [`LlmClient`] for `dyn` contexts.
-pub trait LlmClientExt: LlmClient {
-    /// Like [`LlmClient::query`] but deserialises the response as `T`.
-    fn query_json<T>(&self, query: &str) -> Result<T, LlmError>
-    where
-        T: DeserializeOwned,
-    {
-        let raw = self.query(query)?;
-        serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
-            reason: e.to_string(),
-            raw,
-        })
-    }
-
-    /// Like [`LlmClient::query_cached`] but deserialises the response as `T`.
-    fn query_json_cached<T>(&self, query: &str, cache: &CacheResult) -> Result<T, LlmError>
-    where
-        T: DeserializeOwned,
-    {
-        let raw = self.query_cached(query, cache)?;
-        serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
-            reason: e.to_string(),
-            raw,
-        })
-    }
-}
-
-impl<C: LlmClient + ?Sized> LlmClientExt for C {}

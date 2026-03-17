@@ -1,9 +1,11 @@
-use serde_json::{json, Value};
+use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
+use serde_json::{Value, json};
 
 use crate::{
+    attachment::Attachment,
     builder::{ClientConfig, ResponseShape},
     error::LlmError,
-    traits::{CacheResult, LlmClient},
+    traits::{CacheBuilder, CacheResult, LlmClient, QueryBuilder},
 };
 
 pub struct OpenAiClient {
@@ -31,7 +33,38 @@ impl OpenAiClient {
         })
     }
 
-    fn build_body(&self, query: &str, system_prefix: Option<&str>) -> Value {
+    fn build_user_content(prompt: &str, attachments: &[Attachment]) -> Result<Value, LlmError> {
+        if attachments.is_empty() {
+            return Ok(json!(prompt));
+        }
+
+        let mut parts: Vec<Value> = Vec::new();
+
+        for att in attachments {
+            let (bytes, mime) = att.resolve()?;
+            if mime.starts_with("image/") {
+                let data_url = format!("data:{mime};base64,{}", B64.encode(&bytes));
+                parts.push(json!({
+                    "type": "image_url",
+                    "image_url": {"url": data_url}
+                }));
+            } else {
+                return Err(LlmError::Config(format!(
+                    "OpenAI does not support document attachments (mime: {mime})"
+                )));
+            }
+        }
+
+        parts.push(json!({"type": "text", "text": prompt}));
+        Ok(Value::Array(parts))
+    }
+
+    fn build_body(
+        &self,
+        prompt: &str,
+        attachments: &[Attachment],
+        system_prefix: Option<&str>,
+    ) -> Result<Value, LlmError> {
         let system_content = match system_prefix {
             Some(prefix) => format!("{}\n\n{}", self.instruction, prefix),
             None => self.instruction.clone(),
@@ -42,7 +75,7 @@ impl OpenAiClient {
             "max_tokens": self.max_tokens,
             "messages": [
                 {"role": "system", "content": system_content},
-                {"role": "user", "content": query}
+                {"role": "user", "content": Self::build_user_content(prompt, attachments)?}
             ]
         });
 
@@ -64,7 +97,7 @@ impl OpenAiClient {
             }
         }
 
-        body
+        Ok(body)
     }
 
     fn send_and_extract(&self, body: Value) -> Result<String, LlmError> {
@@ -86,11 +119,10 @@ impl OpenAiClient {
             return Err(LlmError::ProviderError { status, body: raw });
         }
 
-        let parsed: Value =
-            serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
-                reason: e.to_string(),
-                raw: raw.clone(),
-            })?;
+        let parsed: Value = serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
+            reason: e.to_string(),
+            raw: raw.clone(),
+        })?;
 
         parsed["choices"][0]["message"]["content"]
             .as_str()
@@ -103,16 +135,35 @@ impl OpenAiClient {
 }
 
 impl LlmClient for OpenAiClient {
-    fn query(&self, query: &str) -> Result<String, LlmError> {
-        self.send_and_extract(self.build_body(query, None))
+    fn query(&self, prompt: &str) -> QueryBuilder<'_> {
+        let client: &dyn LlmClient = self;
+        QueryBuilder::new(client, prompt)
     }
 
-    fn query_with_cache(&self, query: &str, cache_id: &str) -> Result<String, LlmError> {
-        self.send_and_extract(self.build_body(query, Some(cache_id)))
+    fn build_cache(&self, content: &str) -> CacheBuilder<'_> {
+        let client: &dyn LlmClient = self;
+        CacheBuilder::new(client, content)
     }
 
-    fn build_cache(&self, content: &str) -> CacheResult {
+    fn execute_query(
+        &self,
+        prompt: &str,
+        attachments: &[Attachment],
+        cache: Option<&CacheResult>,
+    ) -> Result<String, LlmError> {
+        let prefix = match cache {
+            Some(CacheResult::Key(id)) => Some(id.as_str()),
+            _ => None,
+        };
+        self.send_and_extract(self.build_body(prompt, attachments, prefix)?)
+    }
+
+    fn execute_cache(
+        &self,
+        content: &str,
+        _attachments: &[Attachment],
+    ) -> Result<CacheResult, LlmError> {
         // OpenAI prompt caching is automatic — no explicit cache creation endpoint.
-        CacheResult::Key(content.to_string())
+        Ok(CacheResult::Key(content.to_string()))
     }
 }

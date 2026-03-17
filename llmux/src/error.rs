@@ -19,4 +19,9 @@ pub enum LlmError {
     /// A required configuration field is missing or invalid.
     #[error("configuration error: {0}")]
     Config(String),
+
+    /// A query was built with `require_cache()` but no cache was provided or
+    /// the cache was [`CacheResult::Unsupported`](crate::CacheResult::Unsupported).
+    #[error("cache is required for this query but was not provided or is unsupported")]
+    CacheRequired,
 }

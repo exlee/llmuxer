@@ -1,9 +1,11 @@
-use serde_json::{json, Value};
+use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
+use serde_json::{Value, json};
 
 use crate::{
+    attachment::Attachment,
     builder::{ClientConfig, ResponseShape},
     error::LlmError,
-    traits::{CacheResult, LlmClient},
+    traits::{CacheBuilder, CacheResult, LlmClient, QueryBuilder},
 };
 
 pub struct AnthropicClient {
@@ -45,32 +47,73 @@ impl AnthropicClient {
         headers
     }
 
-    fn build_messages_body(&self, query: &str) -> Value {
-        let mut body = json!({
-            "model": self.model,
-            "max_tokens": self.max_tokens,
-            "system": self.instruction,
-            "messages": [{"role": "user", "content": query}]
-        });
-
-        if self.thinking {
-            let budget = (self.max_tokens / 2).max(1024);
-            body["thinking"] = json!({"type": "enabled", "budget_tokens": budget});
+    /// Build the content array for a user message, including any attachments.
+    fn build_user_content(prompt: &str, attachments: &[Attachment]) -> Result<Value, LlmError> {
+        if attachments.is_empty() {
+            return Ok(json!(prompt));
         }
 
-        self.apply_response_shape(&mut body);
-        body
+        let mut parts: Vec<Value> = Vec::new();
+
+        for att in attachments {
+            let (bytes, mime) = att.resolve()?;
+            let block = if mime.starts_with("image/") {
+                json!({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": mime,
+                        "data": B64.encode(&bytes)
+                    }
+                })
+            } else if mime == "text/plain" {
+                json!({
+                    "type": "document",
+                    "source": {
+                        "type": "text",
+                        "data": String::from_utf8_lossy(&bytes).into_owned()
+                    }
+                })
+            } else {
+                // PDF and other document types
+                json!({
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": mime,
+                        "data": B64.encode(&bytes)
+                    }
+                })
+            };
+            parts.push(block);
+        }
+
+        parts.push(json!({"type": "text", "text": prompt}));
+        Ok(Value::Array(parts))
     }
 
-    fn build_cached_body(&self, query: &str, cache_id: &str) -> Value {
+    fn build_body(
+        &self,
+        prompt: &str,
+        attachments: &[Attachment],
+        cache_id: Option<&str>,
+    ) -> Result<Value, LlmError> {
+        let system: Value = match cache_id {
+            None => json!(self.instruction),
+            Some(id) => json!([
+                {"type": "text", "text": self.instruction},
+                {"type": "text", "text": id, "cache_control": {"type": "ephemeral"}}
+            ]),
+        };
+
         let mut body = json!({
             "model": self.model,
             "max_tokens": self.max_tokens,
-            "system": [
-                {"type": "text", "text": self.instruction},
-                {"type": "text", "text": cache_id, "cache_control": {"type": "ephemeral"}}
-            ],
-            "messages": [{"role": "user", "content": query}]
+            "system": system,
+            "messages": [{
+                "role": "user",
+                "content": Self::build_user_content(prompt, attachments)?
+            }]
         });
 
         if self.thinking {
@@ -79,7 +122,7 @@ impl AnthropicClient {
         }
 
         self.apply_response_shape(&mut body);
-        body
+        Ok(body)
     }
 
     fn apply_response_shape(&self, body: &mut Value) {
@@ -109,11 +152,10 @@ impl AnthropicClient {
             return Err(LlmError::ProviderError { status, body: raw });
         }
 
-        let parsed: Value =
-            serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
-                reason: e.to_string(),
-                raw: raw.clone(),
-            })?;
+        let parsed: Value = serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
+            reason: e.to_string(),
+            raw: raw.clone(),
+        })?;
 
         self.extract_text(&parsed, &raw)
     }
@@ -159,15 +201,37 @@ impl AnthropicClient {
 }
 
 impl LlmClient for AnthropicClient {
-    fn query(&self, query: &str) -> Result<String, LlmError> {
-        self.send_and_extract(self.build_messages_body(query))
+    fn query(&self, prompt: &str) -> QueryBuilder<'_> {
+        let client: &dyn LlmClient = self;
+        QueryBuilder::new(client, prompt)
     }
 
-    fn query_with_cache(&self, query: &str, cache_id: &str) -> Result<String, LlmError> {
-        self.send_and_extract(self.build_cached_body(query, cache_id))
+    fn build_cache(&self, content: &str) -> CacheBuilder<'_> {
+        let client: &dyn LlmClient = self;
+        CacheBuilder::new(client, content)
     }
 
-    fn build_cache(&self, content: &str) -> CacheResult {
-        CacheResult::Key(content.to_string())
+    fn execute_query(
+        &self,
+        prompt: &str,
+        attachments: &[Attachment],
+        cache: Option<&CacheResult>,
+    ) -> Result<String, LlmError> {
+        let cache_id = match cache {
+            Some(CacheResult::Key(id)) => Some(id.as_str()),
+            _ => None,
+        };
+        self.send_and_extract(self.build_body(prompt, attachments, cache_id)?)
+    }
+
+    fn execute_cache(
+        &self,
+        content: &str,
+        _attachments: &[Attachment],
+    ) -> Result<CacheResult, LlmError> {
+        // Anthropic's ephemeral caching is marker-based: the content string
+        // is stored as the key and replayed in the system message with
+        // cache_control on each request.
+        Ok(CacheResult::Key(content.to_string()))
     }
 }
