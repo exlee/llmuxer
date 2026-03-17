@@ -1,18 +1,18 @@
 [package]
-name        = "llmux-egui"
+name        = "llmuxer-egui"
 version.workspace    = true
 edition.workspace    = true
 authors.workspace    = true
 repository.workspace = true
 license.workspace    = true
-description = "egui widget for configuring llmux providers at runtime"
+description = "egui widget for configuring llmuxer providers at runtime"
 keywords    = ["llm", "egui", "ai", "settings", "ui"]
 categories  = ["gui"]
 readme      = "README.md"
 
 [dependencies]
-llmux          = { workspace = true }
-llmux-keystore = { workspace = true }
+llmuxer          = { workspace = true }
+llmuxer-keystore = { workspace = true }
 serde          = { workspace = true }
 serde_json     = { workspace = true }
 egui           = "0.33"

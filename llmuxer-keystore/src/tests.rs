@@ -1,5 +1,5 @@
 use crate::{KeystoreError, ProviderStore};
-use llmux::{LlmConfig, Provider};
+use llmuxer::{LlmConfig, Provider};
 use std::path::{Path, PathBuf};
 
 /// Minimal RAII temp directory — no `tempfile` crate required.
@@ -10,7 +10,7 @@ impl TempDir {
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!("llmux_ks_test_{}_{}", std::process::id(), n));
+        let path = std::env::temp_dir().join(format!("llmuxer_ks_test_{}_{}", std::process::id(), n));
         std::fs::create_dir_all(&path).expect("create temp dir");
         Self(path)
     }

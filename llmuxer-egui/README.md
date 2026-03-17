@@ -1,14 +1,14 @@
-# llmux-egui
+# llmuxer-egui
 
-egui widget for configuring llmux providers at runtime. Renders a settings button that opens a modal panel with per-provider fields. Changes are committed to `llmux-keystore` on Save.
+egui widget for configuring llmuxer providers at runtime. Renders a settings button that opens a modal panel with per-provider fields. Changes are committed to `llmuxer-keystore` on Save.
 
 ## Usage
 
 Add `LlmConfigWidget` to your `eframe::App` struct and call `show` every frame:
 
 ```rust
-use llmux_egui::LlmConfigWidget;
-use llmux::LlmConfig;
+use llmuxer_egui::LlmConfigWidget;
+use llmuxer::LlmConfig;
 
 struct MyApp {
     llm_widget: LlmConfigWidget,
@@ -35,4 +35,4 @@ impl MyApp {
 }
 ```
 
-The widget loads saved credentials from `llmux-keystore` on construction and reloads them on Cancel.
+The widget loads saved credentials from `llmuxer-keystore` on construction and reloads them on Cancel.

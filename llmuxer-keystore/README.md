@@ -1,12 +1,12 @@
-# llmux-keystore
+# llmuxer-keystore
 
-Credential persistence for llmux. Stores one `LlmConfig` per provider in `~/.config/llmux/config.json` with file permissions set to 0600.
+Credential persistence for llmuxer. Stores one `LlmConfig` per provider in `~/.config/llmuxer/config.json` with file permissions set to 0600.
 
 ## Usage
 
 ```rust
-use llmux::{LlmConfig, Provider};
-use llmux_keystore::ProviderStore;
+use llmuxer::{LlmConfig, Provider};
+use llmuxer_keystore::ProviderStore;
 
 // Save credentials
 let mut store = ProviderStore::load()?;
@@ -21,7 +21,7 @@ store.save()?;
 // Load and use
 let store = ProviderStore::load()?;
 if let Some(config) = store.get(&Provider::Anthropic) {
-    let client = llmux::LlmClientBuilder::new()
+    let client = llmuxer::LlmClientBuilder::new()
         .config(config.clone())
         .build()?;
 }

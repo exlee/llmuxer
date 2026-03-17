@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use egui::Context;
-use llmux::{LlmConfig, Provider};
-use llmux_keystore::ProviderStore;
+use llmuxer::{LlmConfig, Provider};
+use llmuxer_keystore::ProviderStore;
 
 /// Retained-mode configuration widget. Renders a button that opens a modal
 /// panel. Owns all draft state internally. Changes are committed only on **Save**.

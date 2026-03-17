@@ -1,11 +1,11 @@
-# llmux
+# llmuxer
 
 Core crate. Provides `LlmClient`, `LlmClientBuilder`, and provider implementations for Anthropic, Gemini, OpenAI, and Ollama.
 
 ## Usage
 
 ```rust
-use llmux::{LlmClientBuilder, Provider, ResponseShape};
+use llmuxer::{LlmClientBuilder, Provider, ResponseShape};
 use serde_json::json;
 
 // Plain text query
@@ -19,7 +19,7 @@ let client = LlmClientBuilder::new()
 let text = client.query("Summarise the Rust ownership model in one sentence.")?;
 
 // Structured JSON output
-use llmux::LlmClientExt;
+use llmuxer::LlmClientExt;
 
 #[derive(serde::Deserialize)]
 struct Summary { sentence: String }

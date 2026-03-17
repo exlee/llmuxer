@@ -1,4 +1,4 @@
-// llmux/src/tests/config.rs
+// llmuxer/src/tests/config.rs
 #[cfg(test)]
 mod tests {
     use crate::{LlmConfig, Provider};

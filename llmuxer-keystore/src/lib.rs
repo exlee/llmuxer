@@ -4,7 +4,7 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 #[cfg(test)]
 mod tests;
-use llmux::{LlmConfig, Provider};
+use llmuxer::{LlmConfig, Provider};
 
 /// Errors that can occur during keystore operations.
 #[derive(Debug)]
@@ -50,7 +50,7 @@ impl From<serde_json::Error> for KeystoreError {
 }
 
 /// Shared credential store. Persists one `LlmConfig` per provider at
-/// `~/.config/llmux/config.json` with permissions 0600.
+/// `~/.config/llmuxer/config.json` with permissions 0600.
 pub struct ProviderStore {
     pub configs: HashMap<Provider, LlmConfig>,
 }
@@ -58,10 +58,10 @@ pub struct ProviderStore {
 impl ProviderStore {
     fn config_path() -> Result<std::path::PathBuf, KeystoreError> {
         let dir = dirs::config_dir().ok_or(KeystoreError::NoConfigDir)?;
-        Ok(dir.join("llmux").join("config.json"))
+        Ok(dir.join("llmuxer").join("config.json"))
     }
 
-    /// Load from `~/.config/llmux/config.json`.
+    /// Load from `~/.config/llmuxer/config.json`.
     /// Returns an empty store if the file does not exist.
     pub fn load() -> Result<Self, KeystoreError> {
         Self::load_from(Self::config_path()?)
@@ -80,7 +80,7 @@ impl ProviderStore {
         Ok(Self { configs })
     }
 
-    /// Write to `~/.config/llmux/config.json` with permissions 0600.
+    /// Write to `~/.config/llmuxer/config.json` with permissions 0600.
     pub fn save(&self) -> Result<(), KeystoreError> {
         self.save_to(Self::config_path()?)
     }

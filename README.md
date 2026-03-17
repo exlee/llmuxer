@@ -1,4 +1,4 @@
-# llmux
+# llmuxer
 
 Synchronous Rust client library for Anthropic, Gemini, OpenAI, and Ollama with a unified trait interface.
 
@@ -6,14 +6,14 @@ Synchronous Rust client library for Anthropic, Gemini, OpenAI, and Ollama with a
 
 | Crate | Description |
 |---|---|
-| [`llmux`](llmux/) | Core client trait and provider implementations |
-| [`llmux-keystore`](llmux-keystore/) | Credential persistence to `~/.config/llmux/config.json` |
-| [`llmux-egui`](llmux-egui/) | egui widget for configuring providers at runtime |
+| [`llmuxer`](llmuxer/) | Core client trait and provider implementations |
+| [`llmuxer-keystore`](llmuxer-keystore/) | Credential persistence to `~/.config/llmuxer/config.json` |
+| [`llmuxer-egui`](llmuxer-egui/) | egui widget for configuring providers at runtime |
 
 ## Quick start
 
 ```rust
-use llmux::{LlmClientBuilder, Provider};
+use llmuxer::{LlmClientBuilder, Provider};
 
 let client = LlmClientBuilder::new()
     .provider(Provider::Anthropic)
