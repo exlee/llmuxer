@@ -1,0 +1,17 @@
+[package]
+name        = "llmux"
+version.workspace    = true
+edition.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+license.workspace    = true
+description = "Synchronous Rust client for Anthropic, Gemini, OpenAI, and Ollama with a unified trait interface"
+keywords    = ["llm", "ai", "anthropic", "openai", "gemini"]
+categories  = ["api-bindings"]
+readme      = "README.md"
+
+[dependencies]
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+thiserror   = { workspace = true }
+reqwest     = { workspace = true }

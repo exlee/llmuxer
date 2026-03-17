@@ -1,0 +1,19 @@
+[workspace]
+members  = ["llmux", "llmux-keystore", "llmux-egui"]
+resolver = "3"
+
+[workspace.package]
+version    = "0.1.0"
+edition    = "2024"
+authors    = ["Przemysław Alexander Kamiński <exlee@users.noreply.github.com>"]
+repository = "https://github.com/exlee/llmux"
+license    = "MIT"
+
+[workspace.dependencies]
+serde        = { version = "1", features = ["derive"] }
+serde_json   = "1"
+thiserror    = "1"
+reqwest      = { version = "0.12", features = ["json", "blocking"] }
+tokio        = { version = "1", features = ["full"] }
+llmux        = { path = "llmux" }
+llmux-keystore = { path = "llmux-keystore" }

@@ -1,0 +1,17 @@
+[package]
+name        = "llmux-keystore"
+version.workspace    = true
+edition.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+license.workspace    = true
+description = "Credential persistence for llmux: stores one LlmConfig per provider in ~/.config/llmux/config.json"
+keywords    = ["llm", "credentials", "keystore", "config"]
+categories  = ["config"]
+readme      = "README.md"
+
+[dependencies]
+llmux      = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+dirs       = "5"
