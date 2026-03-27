@@ -28,7 +28,9 @@ impl OllamaClient {
             instruction: config.instruction,
             max_tokens: config.max_tokens,
             response_shape: config.response_shape,
-            client: reqwest::blocking::Client::new(),
+            client: reqwest::blocking::Client::builder()
+                .timeout(config.timeout)
+                .build()?,
         })
     }
 

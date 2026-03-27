@@ -23,6 +23,7 @@ pub(crate) struct ClientConfig {
     pub max_tokens: u32,
     pub thinking: bool,
     pub response_shape: ResponseShape,
+    pub timeout: std::time::Duration,
 }
 
 /// Fluent builder for LLM clients. Connectivity comes from `LlmConfig` or
@@ -41,6 +42,7 @@ pub struct LlmClientBuilder {
     max_tokens: Option<u32>,
     thinking: Option<bool>,
     response_shape: Option<ResponseShape>,
+    timeout: Option<std::time::Duration>,
 }
 
 impl LlmClientBuilder {
@@ -124,6 +126,14 @@ impl LlmClientBuilder {
         }
     }
 
+    /// Sets the request timeout. Defaults to 30 seconds.
+    pub fn timeout(self, d: std::time::Duration) -> Self {
+        Self {
+            timeout: Some(d),
+            ..self
+        }
+    }
+
     /// Validates configuration and constructs the provider client.
     ///
     /// Returns [`LlmError::Config`] when required fields are missing.
@@ -170,6 +180,7 @@ impl LlmClientBuilder {
             max_tokens,
             thinking,
             response_shape: self.response_shape.unwrap_or(ResponseShape::Text),
+            timeout: self.timeout.unwrap_or(std::time::Duration::from_secs(30)),
         };
 
         match provider {
