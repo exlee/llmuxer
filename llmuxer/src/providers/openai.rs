@@ -21,9 +21,13 @@ pub struct OpenAiClient {
 
 impl OpenAiClient {
     pub(crate) fn new(config: ClientConfig) -> Result<Self, LlmError> {
+        let base_url = match config.base_url {
+            Some(url) => url,
+            None => "https://api.openai.com".to_string(),
+        };
         Ok(Self {
             api_key: config.api_key,
-            base_url: "https://api.openai.com".into(),
+            base_url: base_url,
             model: config.model,
             instruction: config.instruction,
             max_tokens: config.max_tokens,
