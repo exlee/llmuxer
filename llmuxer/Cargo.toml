@@ -10,9 +10,14 @@ keywords    = ["llm", "ai", "anthropic", "openai", "gemini"]
 categories  = ["api-bindings"]
 readme      = "README.md"
 
+[features]
+default = ["async"]
+async = ["dep:futures"]
+
 [dependencies]
 serde       = { workspace = true }
 serde_json  = { workspace = true }
 thiserror   = { workspace = true }
 reqwest     = { workspace = true }
 base64      = "0.22"
+futures     = { version = "0.3.32", optional = true }

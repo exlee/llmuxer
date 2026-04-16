@@ -2,8 +2,10 @@ pub mod attachment;
 pub mod builder;
 pub mod config;
 pub mod error;
-pub mod providers;
-pub mod traits;
+#[cfg(not(feature = "async"))]
+include!("lib_sync.rs");
+#[cfg(feature = "async")]
+include!("lib_async.rs");
 
 pub use attachment::{Attachment, AttachmentData};
 pub use builder::{LlmClientBuilder, ResponseShape};
