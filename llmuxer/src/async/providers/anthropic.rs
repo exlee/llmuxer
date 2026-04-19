@@ -6,6 +6,8 @@ use crate::{
     attachment::Attachment,
     builder::{ClientConfig, ResponseShape},
     error::LlmError,
+    token_extraction,
+    token_usage::WithTokenUsage,
     traits::{CacheBuilder, CacheResult, LlmClient, QueryBuilder},
 };
 
@@ -230,6 +232,55 @@ impl LlmClient for AnthropicClient {
             let cache_id = cache_key.as_deref();
             let body = self.build_body(&prompt, &attachments, cache_id)?;
             self.send_and_extract(body).await
+        })
+    }
+
+    fn execute_query_with_tokens(
+        &self,
+        prompt: &str,
+        attachments: &[Attachment],
+        cache: Option<&CacheResult>,
+    ) -> BoxFuture<'_, Result<WithTokenUsage<String>, LlmError>> {
+        let prompt = prompt.to_owned();
+        let attachments = attachments.to_vec();
+        let cache_key = cache.and_then(|c| match c {
+            CacheResult::Key(id) => Some(id.clone()),
+            _ => None,
+        });
+
+        Box::pin(async move {
+            let cache_id = cache_key.as_deref();
+            let body = self.build_body(&prompt, &attachments, cache_id)?;
+            let url = format!("{}/v1/messages", self.base_url);
+
+            let resp = self
+                .client
+                .post(&url)
+                .headers(self.headers())
+                .json(&body)
+                .send()
+                .await?;
+
+            let status = resp.status().as_u16();
+            let raw = resp.text().await?;
+
+            if status >= 400 {
+                return Err(LlmError::ProviderError { status, body: raw });
+            }
+
+            let parsed: serde_json::Value =
+                serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
+                    reason: e.to_string(),
+                    raw: raw.clone(),
+                })?;
+
+            let token_usage = token_extraction::extract_anthropic(&parsed);
+            let result = self.extract_text(&parsed, &raw)?;
+
+            Ok(WithTokenUsage {
+                token_usage,
+                result,
+            })
         })
     }
 

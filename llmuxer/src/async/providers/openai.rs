@@ -6,6 +6,8 @@ use crate::{
     attachment::Attachment,
     builder::{ClientConfig, ResponseShape},
     error::LlmError,
+    token_extraction,
+    token_usage::WithTokenUsage,
     traits::{CacheBuilder, CacheResult, LlmClient, QueryBuilder},
 };
 
@@ -168,6 +170,63 @@ impl LlmClient for OpenAiClient {
             let prefix = cache_key.as_deref();
             self.send_and_extract(self.build_body(&prompt, &attachments, prefix)?)
                 .await
+        })
+    }
+
+    fn execute_query_with_tokens(
+        &self,
+        prompt: &str,
+        attachments: &[Attachment],
+        cache: Option<&CacheResult>,
+    ) -> BoxFuture<'_, Result<WithTokenUsage<String>, LlmError>> {
+        let prompt = prompt.to_string();
+        let attachments = attachments.to_vec();
+        let cache_key = cache.and_then(|c| match c {
+            CacheResult::Key(id) => Some(id.clone()),
+            _ => None,
+        });
+
+        Box::pin(async move {
+            let prefix = cache_key.as_deref();
+            let body = self.build_body(&prompt, &attachments, prefix)?;
+            let url = format!("{}/v1/chat/completions", self.base_url);
+            let auth = format!("Bearer {}", self.api_key);
+
+            let resp = self
+                .client
+                .post(&url)
+                .header("Authorization", auth)
+                .header("content-type", "application/json")
+                .json(&body)
+                .send()
+                .await?;
+
+            let status = resp.status().as_u16();
+            let raw = resp.text().await?;
+
+            if status >= 400 {
+                return Err(LlmError::ProviderError { status, body: raw });
+            }
+
+            let parsed: serde_json::Value =
+                serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
+                    reason: e.to_string(),
+                    raw: raw.clone(),
+                })?;
+
+            let token_usage = token_extraction::extract_openai(&parsed);
+            let result = parsed["choices"][0]["message"]["content"]
+                .as_str()
+                .map(|s| s.to_string())
+                .ok_or_else(|| LlmError::Deserialise {
+                    reason: "could not find text in choices[0].message.content".into(),
+                    raw,
+                })?;
+
+            Ok(WithTokenUsage {
+                token_usage,
+                result,
+            })
         })
     }
 

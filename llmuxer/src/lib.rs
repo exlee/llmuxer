@@ -2,6 +2,8 @@ pub mod attachment;
 pub mod builder;
 pub mod config;
 pub mod error;
+pub mod token_extraction;
+pub mod token_usage;
 #[cfg(not(feature = "async"))]
 include!("lib_sync.rs");
 #[cfg(feature = "async")]
@@ -11,7 +13,8 @@ pub use attachment::{Attachment, AttachmentData};
 pub use builder::{LlmClientBuilder, ResponseShape};
 pub use config::{LlmConfig, Provider};
 pub use error::LlmError;
-pub use traits::{CacheBuilder, CacheResult, LlmClient, QueryBuilder};
+pub use token_usage::{TokenUsage, WithTokenUsage};
+pub use traits::{CacheBuilder, CacheResult, LlmClient, QueryBuilder, QueryBuilderWithTokens};
 
 #[cfg(test)]
 mod tests {

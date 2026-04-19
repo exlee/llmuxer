@@ -5,6 +5,8 @@ use crate::{
     attachment::Attachment,
     builder::{ClientConfig, ResponseShape},
     error::LlmError,
+    token_extraction,
+    token_usage::WithTokenUsage,
     traits::{CacheBuilder, CacheResult, LlmClient, QueryBuilder},
 };
 
@@ -141,6 +143,63 @@ impl LlmClient for GeminiClient {
         };
 
         self.send_and_extract(self.generate_url(), body)
+    }
+
+    fn execute_query_with_tokens(
+        &self,
+        prompt: &str,
+        attachments: &[Attachment],
+        cache: Option<&CacheResult>,
+    ) -> Result<WithTokenUsage<String>, LlmError> {
+        let parts = Self::build_parts(prompt, attachments)?;
+
+        let body = match cache {
+            Some(CacheResult::Key(id)) => json!({
+                "cachedContent": id,
+                "contents": [{"role": "user", "parts": parts}],
+                "generationConfig": self.build_generation_config()
+            }),
+            _ => json!({
+                "systemInstruction": {"parts": [{"text": self.instruction}]},
+                "contents": [{"role": "user", "parts": parts}],
+                "generationConfig": self.build_generation_config()
+            }),
+        };
+
+        let url = self.generate_url();
+        let resp = self
+            .client
+            .post(&url)
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()?;
+
+        let status = resp.status().as_u16();
+        let raw = resp.text()?;
+
+        if status >= 400 {
+            return Err(LlmError::ProviderError { status, body: raw });
+        }
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
+                reason: e.to_string(),
+                raw: raw.clone(),
+            })?;
+
+        let token_usage = token_extraction::extract_gemini(&parsed);
+        let result = parsed["candidates"][0]["content"]["parts"][0]["text"]
+            .as_str()
+            .map(|s| s.to_string())
+            .ok_or_else(|| LlmError::Deserialise {
+                reason: "could not find text in candidates[0].content.parts[0].text".into(),
+                raw,
+            })?;
+
+        Ok(WithTokenUsage {
+            token_usage,
+            result,
+        })
     }
 
     fn execute_cache(

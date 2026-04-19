@@ -6,6 +6,8 @@ use crate::{
     attachment::Attachment,
     builder::{ClientConfig, ResponseShape},
     error::LlmError,
+    token_extraction,
+    token_usage::WithTokenUsage,
     traits::{CacheBuilder, CacheResult, LlmClient, QueryBuilder},
 };
 
@@ -131,6 +133,74 @@ impl LlmClient for OllamaClient {
                     reason: "could not find text in message.content".into(),
                     raw,
                 })
+        })
+    }
+
+    fn execute_query_with_tokens(
+        &self,
+        prompt: &str,
+        attachments: &[Attachment],
+        _cache: Option<&CacheResult>,
+    ) -> BoxFuture<'_, Result<WithTokenUsage<String>, LlmError>> {
+        let prompt = prompt.to_string();
+        let attachments = attachments.to_vec();
+
+        Box::pin(async move {
+            let url = format!("{}/api/chat", self.base_url);
+            let images = Self::collect_images(&attachments)?;
+
+            let mut user_msg = json!({
+                "role": "user",
+                "content": prompt
+            });
+            if !images.is_empty() {
+                user_msg["images"] = json!(images);
+            }
+
+            let body = json!({
+                "model": self.model,
+                "stream": false,
+                "options": {"num_predict": self.max_tokens},
+                "messages": [
+                    {"role": "system", "content": self.build_system()},
+                    user_msg
+                ]
+            });
+
+            let resp = self
+                .client
+                .post(&url)
+                .header("content-type", "application/json")
+                .json(&body)
+                .send()
+                .await?;
+
+            let status = resp.status().as_u16();
+            let raw = resp.text().await?;
+
+            if status >= 400 {
+                return Err(LlmError::ProviderError { status, body: raw });
+            }
+
+            let parsed: serde_json::Value =
+                serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
+                    reason: e.to_string(),
+                    raw: raw.clone(),
+                })?;
+
+            let token_usage = token_extraction::extract_ollama(&parsed);
+            let result = parsed["message"]["content"]
+                .as_str()
+                .map(|s| s.to_string())
+                .ok_or_else(|| LlmError::Deserialise {
+                    reason: "could not find text in message.content".into(),
+                    raw,
+                })?;
+
+            Ok(WithTokenUsage {
+                token_usage,
+                result,
+            })
         })
     }
 

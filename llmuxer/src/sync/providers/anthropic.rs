@@ -5,6 +5,8 @@ use crate::{
     attachment::Attachment,
     builder::{ClientConfig, ResponseShape},
     error::LlmError,
+    token_extraction,
+    token_usage::WithTokenUsage,
     traits::{CacheBuilder, CacheResult, LlmClient, QueryBuilder},
 };
 
@@ -224,6 +226,47 @@ impl LlmClient for AnthropicClient {
             _ => None,
         };
         self.send_and_extract(self.build_body(prompt, attachments, cache_id)?)
+    }
+
+    fn execute_query_with_tokens(
+        &self,
+        prompt: &str,
+        attachments: &[Attachment],
+        cache: Option<&CacheResult>,
+    ) -> Result<WithTokenUsage<String>, LlmError> {
+        let cache_id = match cache {
+            Some(CacheResult::Key(id)) => Some(id.as_str()),
+            _ => None,
+        };
+        let body = self.build_body(prompt, attachments, cache_id)?;
+        let url = format!("{}/v1/messages", self.base_url);
+        let resp = self
+            .client
+            .post(&url)
+            .headers(self.headers())
+            .json(&body)
+            .send()?;
+
+        let status = resp.status().as_u16();
+        let raw = resp.text()?;
+
+        if status >= 400 {
+            return Err(LlmError::ProviderError { status, body: raw });
+        }
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
+                reason: e.to_string(),
+                raw: raw.clone(),
+            })?;
+
+        let token_usage = token_extraction::extract_anthropic(&parsed);
+        let result = self.extract_text(&parsed, &raw)?;
+
+        Ok(WithTokenUsage {
+            token_usage,
+            result,
+        })
     }
 
     fn execute_cache(
