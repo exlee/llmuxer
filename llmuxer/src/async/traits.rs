@@ -1,16 +1,8 @@
 use futures::future::BoxFuture;
 use serde::de::DeserializeOwned;
 
+pub use crate::shared::CacheResult;
 use crate::{attachment::Attachment, error::LlmError, token_usage::WithTokenUsage};
-
-/// The outcome of a [`CacheBuilder::build`] call.
-#[derive(Debug, Clone)]
-pub enum CacheResult {
-    /// A cache key to pass via [`QueryBuilder::cache`].
-    Key(String),
-    /// This provider does not support caching.
-    Unsupported,
-}
 
 /// Fluent builder for executing a single query.
 ///

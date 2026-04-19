@@ -5,12 +5,21 @@ use crate::{
     attachment::Attachment,
     builder::{ClientConfig, ResponseShape},
     error::LlmError,
+    shared::CacheResult,
     token_extraction,
     token_usage::WithTokenUsage,
-    traits::{CacheBuilder, CacheResult, LlmClient, QueryBuilder},
 };
 
-pub struct AnthropicClient {
+// ---- public type alias for the active mode ----
+
+#[cfg(not(feature = "async"))]
+pub type AnthropicProvider = AnthropicClient<reqwest::blocking::Client>;
+#[cfg(feature = "async")]
+pub type AnthropicProvider = AnthropicClient<reqwest::Client>;
+
+// ---- generic struct + shared logic ----
+
+pub struct AnthropicClient<C> {
     api_key: String,
     base_url: String,
     model: String,
@@ -18,25 +27,10 @@ pub struct AnthropicClient {
     max_tokens: u32,
     thinking: bool,
     response_shape: ResponseShape,
-    client: reqwest::blocking::Client,
+    http: C,
 }
 
-impl AnthropicClient {
-    pub(crate) fn new(config: ClientConfig) -> Result<Self, LlmError> {
-        Ok(Self {
-            api_key: config.api_key,
-            base_url: "https://api.anthropic.com".into(),
-            model: config.model,
-            instruction: config.instruction,
-            max_tokens: config.max_tokens,
-            thinking: config.thinking,
-            response_shape: config.response_shape,
-            client: reqwest::blocking::Client::builder()
-                .timeout(config.timeout)
-                .build()?,
-        })
-    }
-
+impl<C> AnthropicClient<C> {
     fn headers(&self) -> reqwest::header::HeaderMap {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert("x-api-key", self.api_key.parse().unwrap());
@@ -51,7 +45,6 @@ impl AnthropicClient {
         headers
     }
 
-    /// Build the content array for a user message, including any attachments.
     fn build_user_content(prompt: &str, attachments: &[Attachment]) -> Result<Value, LlmError> {
         if attachments.is_empty() {
             return Ok(json!(prompt));
@@ -79,7 +72,6 @@ impl AnthropicClient {
                     }
                 })
             } else {
-                // PDF and other document types
                 json!({
                     "type": "document",
                     "source": {
@@ -140,30 +132,6 @@ impl AnthropicClient {
         }
     }
 
-    fn send_and_extract(&self, body: Value) -> Result<String, LlmError> {
-        let url = format!("{}/v1/messages", self.base_url);
-        let resp = self
-            .client
-            .post(&url)
-            .headers(self.headers())
-            .json(&body)
-            .send()?;
-
-        let status = resp.status().as_u16();
-        let raw = resp.text()?;
-
-        if status >= 400 {
-            return Err(LlmError::ProviderError { status, body: raw });
-        }
-
-        let parsed: Value = serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
-            reason: e.to_string(),
-            raw: raw.clone(),
-        })?;
-
-        self.extract_text(&parsed, &raw)
-    }
-
     fn extract_text(&self, parsed: &Value, raw: &str) -> Result<String, LlmError> {
         let content = parsed["content"]
             .as_array()
@@ -204,15 +172,66 @@ impl AnthropicClient {
     }
 }
 
-impl LlmClient for AnthropicClient {
-    fn query(&self, prompt: &str) -> QueryBuilder<'_> {
-        let client: &dyn LlmClient = self;
-        QueryBuilder::new(client, prompt)
+// ---- sync implementation ----
+
+#[cfg(not(feature = "async"))]
+use crate::traits::LlmClient;
+
+#[cfg(not(feature = "async"))]
+impl AnthropicClient<reqwest::blocking::Client> {
+    pub(crate) fn new(config: ClientConfig) -> Result<Self, LlmError> {
+        Ok(Self {
+            api_key: config.api_key,
+            base_url: "https://api.anthropic.com".into(),
+            model: config.model,
+            instruction: config.instruction,
+            max_tokens: config.max_tokens,
+            thinking: config.thinking,
+            response_shape: config.response_shape,
+            http: reqwest::blocking::Client::builder()
+                .timeout(config.timeout)
+                .build()?,
+        })
     }
 
-    fn build_cache(&self, content: &str) -> CacheBuilder<'_> {
-        let client: &dyn LlmClient = self;
-        CacheBuilder::new(client, content)
+    fn send_request(&self, body: Value) -> Result<(Value, String), LlmError> {
+        let url = format!("{}/v1/messages", self.base_url);
+        let resp = self
+            .http
+            .post(&url)
+            .headers(self.headers())
+            .json(&body)
+            .send()?;
+
+        let status = resp.status().as_u16();
+        let raw = resp.text()?;
+
+        if status >= 400 {
+            return Err(LlmError::ProviderError { status, body: raw });
+        }
+
+        let parsed: Value = serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
+            reason: e.to_string(),
+            raw: raw.clone(),
+        })?;
+
+        Ok((parsed, raw))
+    }
+
+    fn send_and_extract(&self, body: Value) -> Result<String, LlmError> {
+        let (parsed, raw) = self.send_request(body)?;
+        self.extract_text(&parsed, &raw)
+    }
+}
+
+#[cfg(not(feature = "async"))]
+impl LlmClient for AnthropicClient<reqwest::blocking::Client> {
+    fn query(&self, prompt: &str) -> crate::traits::QueryBuilder<'_> {
+        crate::traits::QueryBuilder::new(self, prompt)
+    }
+
+    fn build_cache(&self, content: &str) -> crate::traits::CacheBuilder<'_> {
+        crate::traits::CacheBuilder::new(self, content)
     }
 
     fn execute_query(
@@ -239,30 +258,9 @@ impl LlmClient for AnthropicClient {
             _ => None,
         };
         let body = self.build_body(prompt, attachments, cache_id)?;
-        let url = format!("{}/v1/messages", self.base_url);
-        let resp = self
-            .client
-            .post(&url)
-            .headers(self.headers())
-            .json(&body)
-            .send()?;
-
-        let status = resp.status().as_u16();
-        let raw = resp.text()?;
-
-        if status >= 400 {
-            return Err(LlmError::ProviderError { status, body: raw });
-        }
-
-        let parsed: serde_json::Value =
-            serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
-                reason: e.to_string(),
-                raw: raw.clone(),
-            })?;
-
+        let (parsed, raw) = self.send_request(body)?;
         let token_usage = token_extraction::extract_anthropic(&parsed);
         let result = self.extract_text(&parsed, &raw)?;
-
         Ok(WithTokenUsage {
             token_usage,
             result,
@@ -274,9 +272,125 @@ impl LlmClient for AnthropicClient {
         content: &str,
         _attachments: &[Attachment],
     ) -> Result<CacheResult, LlmError> {
-        // Anthropic's ephemeral caching is marker-based: the content string
-        // is stored as the key and replayed in the system message with
-        // cache_control on each request.
         Ok(CacheResult::Key(content.to_string()))
+    }
+}
+
+// ---- async implementation ----
+
+#[cfg(feature = "async")]
+use crate::traits::LlmClient;
+#[cfg(feature = "async")]
+use futures::future::BoxFuture;
+
+#[cfg(feature = "async")]
+impl AnthropicClient<reqwest::Client> {
+    pub(crate) fn new(config: ClientConfig) -> Result<Self, LlmError> {
+        Ok(Self {
+            api_key: config.api_key,
+            base_url: "https://api.anthropic.com".into(),
+            model: config.model,
+            instruction: config.instruction,
+            max_tokens: config.max_tokens,
+            thinking: config.thinking,
+            response_shape: config.response_shape,
+            http: reqwest::Client::builder().timeout(config.timeout).build()?,
+        })
+    }
+
+    async fn send_request(&self, body: Value) -> Result<(Value, String), LlmError> {
+        let url = format!("{}/v1/messages", self.base_url);
+        let resp = self
+            .http
+            .post(&url)
+            .headers(self.headers())
+            .json(&body)
+            .send()
+            .await?;
+
+        let status = resp.status().as_u16();
+        let raw = resp.text().await?;
+
+        if status >= 400 {
+            return Err(LlmError::ProviderError { status, body: raw });
+        }
+
+        let parsed: Value = serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
+            reason: e.to_string(),
+            raw: raw.clone(),
+        })?;
+
+        Ok((parsed, raw))
+    }
+
+    async fn send_and_extract(&self, body: Value) -> Result<String, LlmError> {
+        let (parsed, raw) = self.send_request(body).await?;
+        self.extract_text(&parsed, &raw)
+    }
+}
+
+#[cfg(feature = "async")]
+impl LlmClient for AnthropicClient<reqwest::Client> {
+    fn query(&self, prompt: &str) -> crate::traits::QueryBuilder<'_> {
+        crate::traits::QueryBuilder::new(self, prompt)
+    }
+
+    fn build_cache(&self, content: &str) -> crate::traits::CacheBuilder<'_> {
+        crate::traits::CacheBuilder::new(self, content)
+    }
+
+    fn execute_query(
+        &self,
+        prompt: &str,
+        attachments: &[Attachment],
+        cache: Option<&CacheResult>,
+    ) -> BoxFuture<'_, Result<String, LlmError>> {
+        let prompt = prompt.to_owned();
+        let attachments = attachments.to_vec();
+        let cache_key = cache.and_then(|c| match c {
+            CacheResult::Key(id) => Some(id.clone()),
+            _ => None,
+        });
+
+        Box::pin(async move {
+            let cache_id = cache_key.as_deref();
+            let body = self.build_body(&prompt, &attachments, cache_id)?;
+            self.send_and_extract(body).await
+        })
+    }
+
+    fn execute_query_with_tokens(
+        &self,
+        prompt: &str,
+        attachments: &[Attachment],
+        cache: Option<&CacheResult>,
+    ) -> BoxFuture<'_, Result<WithTokenUsage<String>, LlmError>> {
+        let prompt = prompt.to_owned();
+        let attachments = attachments.to_vec();
+        let cache_key = cache.and_then(|c| match c {
+            CacheResult::Key(id) => Some(id.clone()),
+            _ => None,
+        });
+
+        Box::pin(async move {
+            let cache_id = cache_key.as_deref();
+            let body = self.build_body(&prompt, &attachments, cache_id)?;
+            let (parsed, raw) = self.send_request(body).await?;
+            let token_usage = token_extraction::extract_anthropic(&parsed);
+            let result = self.extract_text(&parsed, &raw)?;
+            Ok(WithTokenUsage {
+                token_usage,
+                result,
+            })
+        })
+    }
+
+    fn execute_cache(
+        &self,
+        content: &str,
+        _attachments: &[Attachment],
+    ) -> BoxFuture<'_, Result<CacheResult, LlmError>> {
+        let content = content.to_owned();
+        Box::pin(async move { Ok(CacheResult::Key(content)) })
     }
 }

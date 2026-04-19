@@ -139,8 +139,8 @@ impl LlmClientBuilder {
     /// Returns [`LlmError::Config`] when required fields are missing.
     pub fn build(self) -> Result<Box<dyn LlmClient>, LlmError> {
         use crate::providers::{
-            anthropic::AnthropicClient, gemini::GeminiClient, ollama::OllamaClient,
-            openai::OpenAiClient,
+            anthropic::AnthropicProvider, gemini::GeminiProvider, ollama::OllamaProvider,
+            openai::OpenAiProvider,
         };
 
         let provider = self
@@ -184,10 +184,10 @@ impl LlmClientBuilder {
         };
 
         match provider {
-            Provider::Anthropic => Ok(Box::new(AnthropicClient::new(config)?)),
-            Provider::Gemini => Ok(Box::new(GeminiClient::new(config)?)),
-            Provider::OpenAI => Ok(Box::new(OpenAiClient::new(config)?)),
-            Provider::Ollama => Ok(Box::new(OllamaClient::new(config)?)),
+            Provider::Anthropic => Ok(Box::new(AnthropicProvider::new(config)?)),
+            Provider::Gemini => Ok(Box::new(GeminiProvider::new(config)?)),
+            Provider::OpenAI => Ok(Box::new(OpenAiProvider::new(config)?)),
+            Provider::Ollama => Ok(Box::new(OllamaProvider::new(config)?)),
         }
     }
 }
