@@ -1,5 +1,5 @@
 RUSTDOCFLAGS = --cfg docsrs
-CHECKS = __sqlx_prepare __check_docs __check_tests __check_tests_async __check_audit __check_docsrs __check_cargo_check __check_clippy __check_fmt
+CHECKS = __check_docs __check_tests __check_tests_async __check_audit __check_docsrs __check_cargo_check __check_clippy __check_fmt
 
 
 .PHONY: checks
@@ -23,10 +23,6 @@ __check_tests:
 
 __check_tests_async:
 	cargo test --features async
-	@touch $@
-
-__sqlx_prepare:
-	cargo sqlx prepare
 	@touch $@
 
 __check_audit:

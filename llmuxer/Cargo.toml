@@ -1,6 +1,6 @@
 [package]
 name        = "llmuxer"
-version = "0.1.2"
+version = "0.2.0"
 edition.workspace    = true
 authors.workspace    = true
 repository.workspace = true
@@ -9,6 +9,7 @@ description = "Synchronous Rust client for Anthropic, Gemini, OpenAI, and Ollama
 keywords    = ["llm", "ai", "anthropic", "openai", "gemini"]
 categories  = ["api-bindings"]
 readme      = "README.md"
+include = ["README.md", "CHANGELOG.md", "Cargo.toml", "src/**/*"]
 
 [features]
 default = []

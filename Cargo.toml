@@ -15,5 +15,5 @@ serde_json   = "1"
 thiserror    = "1"
 reqwest      = { version = "0.12", default-features = false, features = ["json", "blocking", "rustls-tls"] }
 tokio        = { version = "1", features = ["full"] }
-llmuxer        = { path = "llmuxer", version = "0.1.0" }
+llmuxer        = { path = "llmuxer", version = "0.2.0" }
 llmuxer-keystore = { path = "llmuxer-keystore", version = "0.1.0" }
