@@ -1,4 +1,5 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
+use futures::future::BoxFuture;
 use serde_json::{Value, json};
 
 use crate::{
@@ -16,7 +17,7 @@ pub struct AnthropicClient {
     max_tokens: u32,
     thinking: bool,
     response_shape: ResponseShape,
-    client: reqwest::blocking::Client,
+    client: reqwest::Client,
 }
 
 impl AnthropicClient {
@@ -29,9 +30,7 @@ impl AnthropicClient {
             max_tokens: config.max_tokens,
             thinking: config.thinking,
             response_shape: config.response_shape,
-            client: reqwest::blocking::Client::builder()
-                .timeout(config.timeout)
-                .build()?,
+            client: reqwest::Client::builder().timeout(config.timeout).build()?,
         })
     }
 
@@ -138,17 +137,18 @@ impl AnthropicClient {
         }
     }
 
-    fn send_and_extract(&self, body: Value) -> Result<String, LlmError> {
+    async fn send_and_extract(&self, body: Value) -> Result<String, LlmError> {
         let url = format!("{}/v1/messages", self.base_url);
         let resp = self
             .client
             .post(&url)
             .headers(self.headers())
             .json(&body)
-            .send()?;
+            .send()
+            .await?;
 
         let status = resp.status().as_u16();
-        let raw = resp.text()?;
+        let raw = resp.text().await?;
 
         if status >= 400 {
             return Err(LlmError::ProviderError { status, body: raw });
@@ -203,7 +203,7 @@ impl AnthropicClient {
 }
 
 impl LlmClient for AnthropicClient {
-    async fn query(&self, prompt: &str) -> QueryBuilder<'_> {
+    fn query(&self, prompt: &str) -> QueryBuilder<'_> {
         let client: &dyn LlmClient = self;
         QueryBuilder::new(client, prompt)
     }
@@ -218,22 +218,30 @@ impl LlmClient for AnthropicClient {
         prompt: &str,
         attachments: &[Attachment],
         cache: Option<&CacheResult>,
-    ) -> Result<String, LlmError> {
-        let cache_id = match cache {
-            Some(CacheResult::Key(id)) => Some(id.as_str()),
+    ) -> BoxFuture<'_, Result<String, LlmError>> {
+        let prompt = prompt.to_owned();
+        let attachments = attachments.to_vec();
+        let cache_key = cache.and_then(|c| match c {
+            CacheResult::Key(id) => Some(id.clone()),
             _ => None,
-        };
-        self.send_and_extract(self.build_body(prompt, attachments, cache_id)?)
+        });
+
+        Box::pin(async move {
+            let cache_id = cache_key.as_deref();
+            let body = self.build_body(&prompt, &attachments, cache_id)?;
+            self.send_and_extract(body).await
+        })
     }
 
     fn execute_cache(
         &self,
         content: &str,
         _attachments: &[Attachment],
-    ) -> Result<CacheResult, LlmError> {
+    ) -> BoxFuture<'_, Result<CacheResult, LlmError>> {
         // Anthropic's ephemeral caching is marker-based: the content string
         // is stored as the key and replayed in the system message with
         // cache_control on each request.
-        Ok(CacheResult::Key(content.to_string()))
+        let content = content.to_owned();
+        Box::pin(async move { Ok(CacheResult::Key(content)) })
     }
 }

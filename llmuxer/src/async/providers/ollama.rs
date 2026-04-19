@@ -1,4 +1,5 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
+use futures::future::BoxFuture;
 use serde_json::{Value, json};
 
 use crate::{
@@ -14,7 +15,7 @@ pub struct OllamaClient {
     instruction: String,
     max_tokens: u32,
     response_shape: ResponseShape,
-    client: reqwest::blocking::Client,
+    client: reqwest::Client,
 }
 
 impl OllamaClient {
@@ -28,9 +29,7 @@ impl OllamaClient {
             instruction: config.instruction,
             max_tokens: config.max_tokens,
             response_shape: config.response_shape,
-            client: reqwest::blocking::Client::builder()
-                .timeout(config.timeout)
-                .build()?,
+            client: reqwest::Client::builder().timeout(config.timeout).build()?,
         })
     }
 
@@ -79,61 +78,67 @@ impl LlmClient for OllamaClient {
         prompt: &str,
         attachments: &[Attachment],
         _cache: Option<&CacheResult>,
-    ) -> Result<String, LlmError> {
-        let url = format!("{}/api/chat", self.base_url);
-        let images = Self::collect_images(attachments)?;
+    ) -> BoxFuture<'_, Result<String, LlmError>> {
+        let prompt = prompt.to_string();
+        let attachments = attachments.to_vec();
 
-        let mut user_msg = json!({
-            "role": "user",
-            "content": prompt
-        });
-        if !images.is_empty() {
-            user_msg["images"] = json!(images);
-        }
+        Box::pin(async move {
+            let url = format!("{}/api/chat", self.base_url);
+            let images = Self::collect_images(&attachments)?;
 
-        let body = json!({
-            "model": self.model,
-            "stream": false,
-            "options": {"num_predict": self.max_tokens},
-            "messages": [
-                {"role": "system", "content": self.build_system()},
-                user_msg
-            ]
-        });
+            let mut user_msg = json!({
+                "role": "user",
+                "content": prompt
+            });
+            if !images.is_empty() {
+                user_msg["images"] = json!(images);
+            }
 
-        let resp = self
-            .client
-            .post(&url)
-            .header("content-type", "application/json")
-            .json(&body)
-            .send()?;
+            let body = json!({
+                "model": self.model,
+                "stream": false,
+                "options": {"num_predict": self.max_tokens},
+                "messages": [
+                    {"role": "system", "content": self.build_system()},
+                    user_msg
+                ]
+            });
 
-        let status = resp.status().as_u16();
-        let raw = resp.text()?;
+            let resp = self
+                .client
+                .post(&url)
+                .header("content-type", "application/json")
+                .json(&body)
+                .send()
+                .await?;
 
-        if status >= 400 {
-            return Err(LlmError::ProviderError { status, body: raw });
-        }
+            let status = resp.status().as_u16();
+            let raw = resp.text().await?;
 
-        let parsed: Value = serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
-            reason: e.to_string(),
-            raw: raw.clone(),
-        })?;
+            if status >= 400 {
+                return Err(LlmError::ProviderError { status, body: raw });
+            }
 
-        parsed["message"]["content"]
-            .as_str()
-            .map(|s| s.to_string())
-            .ok_or_else(|| LlmError::Deserialise {
-                reason: "could not find text in message.content".into(),
-                raw,
-            })
+            let parsed: Value = serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
+                reason: e.to_string(),
+                raw: raw.clone(),
+            })?;
+
+            parsed["message"]["content"]
+                .as_str()
+                .map(|s| s.to_string())
+                .ok_or_else(|| LlmError::Deserialise {
+                    reason: "could not find text in message.content".into(),
+                    raw,
+                })
+        })
     }
 
     fn execute_cache(
         &self,
         _content: &str,
         _attachments: &[Attachment],
-    ) -> Result<CacheResult, LlmError> {
-        Ok(CacheResult::Unsupported)
+    ) -> BoxFuture<'_, Result<CacheResult, LlmError>> {
+        Box::pin(async move { Ok(CacheResult::Unsupported) })
     }
 }

@@ -1,4 +1,5 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
+use futures::future::BoxFuture;
 use serde_json::{Value, json};
 
 use crate::{
@@ -16,7 +17,7 @@ pub struct OpenAiClient {
     max_tokens: u32,
     thinking: bool,
     response_shape: ResponseShape,
-    client: reqwest::blocking::Client,
+    client: reqwest::Client,
 }
 
 impl OpenAiClient {
@@ -33,9 +34,7 @@ impl OpenAiClient {
             max_tokens: config.max_tokens,
             thinking: config.thinking,
             response_shape: config.response_shape,
-            client: reqwest::blocking::Client::builder()
-                .timeout(config.timeout)
-                .build()?,
+            client: reqwest::Client::builder().timeout(config.timeout).build()?,
         })
     }
 
@@ -106,7 +105,7 @@ impl OpenAiClient {
         Ok(body)
     }
 
-    fn send_and_extract(&self, body: Value) -> Result<String, LlmError> {
+    async fn send_and_extract(&self, body: Value) -> Result<String, LlmError> {
         let url = format!("{}/v1/chat/completions", self.base_url);
         let auth = format!("Bearer {}", self.api_key);
 
@@ -116,10 +115,11 @@ impl OpenAiClient {
             .header("Authorization", auth)
             .header("content-type", "application/json")
             .json(&body)
-            .send()?;
+            .send()
+            .await?;
 
         let status = resp.status().as_u16();
-        let raw = resp.text()?;
+        let raw = resp.text().await?;
 
         if status >= 400 {
             return Err(LlmError::ProviderError { status, body: raw });
@@ -156,20 +156,30 @@ impl LlmClient for OpenAiClient {
         prompt: &str,
         attachments: &[Attachment],
         cache: Option<&CacheResult>,
-    ) -> Result<String, LlmError> {
-        let prefix = match cache {
-            Some(CacheResult::Key(id)) => Some(id.as_str()),
+    ) -> BoxFuture<'_, Result<String, LlmError>> {
+        let prompt = prompt.to_string();
+        let attachments = attachments.to_vec();
+        let cache_key = cache.and_then(|c| match c {
+            CacheResult::Key(id) => Some(id.clone()),
             _ => None,
-        };
-        self.send_and_extract(self.build_body(prompt, attachments, prefix)?)
+        });
+
+        Box::pin(async move {
+            let prefix = cache_key.as_deref();
+            self.send_and_extract(self.build_body(&prompt, &attachments, prefix)?)
+                .await
+        })
     }
 
     fn execute_cache(
         &self,
         content: &str,
         _attachments: &[Attachment],
-    ) -> Result<CacheResult, LlmError> {
-        // OpenAI prompt caching is automatic — no explicit cache creation endpoint.
-        Ok(CacheResult::Key(content.to_string()))
+    ) -> BoxFuture<'_, Result<CacheResult, LlmError>> {
+        let content = content.to_string();
+        Box::pin(async move {
+            // OpenAI prompt caching is automatic — no explicit cache creation endpoint.
+            Ok(CacheResult::Key(content))
+        })
     }
 }

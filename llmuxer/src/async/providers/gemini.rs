@@ -1,4 +1,5 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
+use futures::future::BoxFuture;
 use serde_json::{Value, json};
 
 use crate::{
@@ -16,7 +17,7 @@ pub struct GeminiClient {
     max_tokens: u32,
     thinking: bool,
     response_shape: ResponseShape,
-    client: reqwest::blocking::Client,
+    client: reqwest::Client,
 }
 
 impl GeminiClient {
@@ -29,9 +30,7 @@ impl GeminiClient {
             max_tokens: config.max_tokens,
             thinking: config.thinking,
             response_shape: config.response_shape,
-            client: reqwest::blocking::Client::builder()
-                .timeout(config.timeout)
-                .build()?,
+            client: reqwest::Client::builder().timeout(config.timeout).build()?,
         })
     }
 
@@ -78,16 +77,17 @@ impl GeminiClient {
         Ok(parts)
     }
 
-    fn send_and_extract(&self, url: String, body: Value) -> Result<String, LlmError> {
+    async fn send_and_extract(&self, url: String, body: Value) -> Result<String, LlmError> {
         let resp = self
             .client
             .post(&url)
             .header("content-type", "application/json")
             .json(&body)
-            .send()?;
+            .send()
+            .await?;
 
         let status = resp.status().as_u16();
-        let raw = resp.text()?;
+        let raw = resp.text().await?;
 
         if status >= 400 {
             return Err(LlmError::ProviderError { status, body: raw });
@@ -124,76 +124,87 @@ impl LlmClient for GeminiClient {
         prompt: &str,
         attachments: &[Attachment],
         cache: Option<&CacheResult>,
-    ) -> Result<String, LlmError> {
-        let parts = Self::build_parts(prompt, attachments)?;
+    ) -> BoxFuture<'_, Result<String, LlmError>> {
+        let prompt = prompt.to_string();
+        let attachments = attachments.to_vec();
+        let cache = cache.cloned();
 
-        let body = match cache {
-            Some(CacheResult::Key(id)) => json!({
-                "cachedContent": id,
-                "contents": [{"role": "user", "parts": parts}],
-                "generationConfig": self.build_generation_config()
-            }),
-            _ => json!({
-                "systemInstruction": {"parts": [{"text": self.instruction}]},
-                "contents": [{"role": "user", "parts": parts}],
-                "generationConfig": self.build_generation_config()
-            }),
-        };
+        Box::pin(async move {
+            let parts = Self::build_parts(&prompt, &attachments)?;
 
-        self.send_and_extract(self.generate_url(), body)
+            let body = match &cache {
+                Some(CacheResult::Key(id)) => json!({
+                    "cachedContent": id,
+                    "contents": [{"role": "user", "parts": parts}],
+                    "generationConfig": self.build_generation_config()
+                }),
+                _ => json!({
+                    "systemInstruction": {"parts": [{"text": self.instruction}]},
+                    "contents": [{"role": "user", "parts": parts}],
+                    "generationConfig": self.build_generation_config()
+                }),
+            };
+
+            self.send_and_extract(self.generate_url(), body).await
+        })
     }
 
     fn execute_cache(
         &self,
         content: &str,
         attachments: &[Attachment],
-    ) -> Result<CacheResult, LlmError> {
-        let url = format!(
-            "{}/v1beta/cachedContents?key={}",
-            self.base_url, self.api_key
-        );
+    ) -> BoxFuture<'_, Result<CacheResult, LlmError>> {
+        let content = content.to_string();
+        let attachments = attachments.to_vec();
 
-        let mut parts: Vec<Value> = Vec::new();
-        for att in attachments {
-            let (bytes, mime) = att.resolve()?;
-            parts.push(json!({
-                "inlineData": {
-                    "mimeType": mime,
-                    "data": B64.encode(&bytes)
-                }
-            }));
-        }
-        parts.push(json!({"text": content}));
+        Box::pin(async move {
+            let url = format!(
+                "{}/v1beta/cachedContents?key={}",
+                self.base_url, self.api_key
+            );
 
-        let body = json!({
-            "model": format!("models/{}", self.model),
-            "contents": [{"role": "user", "parts": parts}],
-            "ttl": "3600s"
-        });
+            let mut parts: Vec<Value> = Vec::new();
+            for att in &attachments {
+                let (bytes, mime) = att.resolve()?;
+                parts.push(json!({
+                    "inlineData": {
+                        "mimeType": mime,
+                        "data": B64.encode(&bytes)
+                    }
+                }));
+            }
+            parts.push(json!({"text": content}));
 
-        let resp = self
-            .client
-            .post(&url)
-            .header("content-type", "application/json")
-            .json(&body)
-            .send()
-            .map_err(LlmError::Request)?;
+            let body = json!({
+                "model": format!("models/{}", self.model),
+                "contents": [{"role": "user", "parts": parts}],
+                "ttl": "3600s"
+            });
 
-        let status = resp.status().as_u16();
-        let raw = resp.text().map_err(LlmError::Request)?;
+            let resp = self
+                .client
+                .post(&url)
+                .header("content-type", "application/json")
+                .json(&body)
+                .send()
+                .await?;
 
-        if status >= 400 {
-            return Err(LlmError::ProviderError { status, body: raw });
-        }
+            let status = resp.status().as_u16();
+            let raw = resp.text().await?;
 
-        let parsed: Value = serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
-            reason: e.to_string(),
-            raw: raw.clone(),
-        })?;
+            if status >= 400 {
+                return Err(LlmError::ProviderError { status, body: raw });
+            }
 
-        parsed["name"]
-            .as_str()
-            .map(|s| CacheResult::Key(s.to_string()))
-            .ok_or_else(|| LlmError::Cache("no name in cachedContents response".into()))
+            let parsed: Value = serde_json::from_str(&raw).map_err(|e| LlmError::Deserialise {
+                reason: e.to_string(),
+                raw: raw.clone(),
+            })?;
+
+            parsed["name"]
+                .as_str()
+                .map(|s| CacheResult::Key(s.to_string()))
+                .ok_or_else(|| LlmError::Cache("no name in cachedContents response".into()))
+        })
     }
 }

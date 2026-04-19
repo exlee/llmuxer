@@ -76,11 +76,9 @@ impl<'c> QueryBuilder<'c> {
                 Some(CacheResult::Key(_)) => {}
             }
         }
-        Box::pin(
-            self.client
-                .execute_query(&self.prompt, &self.attachments, self.cache),
-        )
-        .await
+        self.client
+            .execute_query(&self.prompt, &self.attachments, self.cache)
+            .await
     }
 
     /// Execute the query and deserialize the response as `T`.
@@ -132,17 +130,21 @@ impl<'c> CacheBuilder<'c> {
     }
 }
 
-/// Core synchronous client trait. Implement this to add a new provider.
+/// Core asynchronous client trait. Implement this to add a new provider.
 ///
 /// Use [`LlmClientBuilder`](crate::LlmClientBuilder) to construct provider
 /// clients. Call [`query`](LlmClient::query) or
 /// [`build_cache`](LlmClient::build_cache) to begin a fluent interaction.
+///
+/// `query` and `build_cache` are synchronous builder constructors.
+/// `execute_query` and `execute_cache` perform actual I/O and return boxed
+/// futures.
 pub trait LlmClient: Send + Sync {
     /// Begin building a query against this client.
-    fn query(&self, prompt: &str) -> BoxFuture<QueryBuilder<'_>>;
+    fn query(&self, prompt: &str) -> QueryBuilder<'_>;
 
     /// Begin building a cache entry.
-    fn build_cache(&self, content: &str) -> BoxFuture<CacheBuilder<'_>>;
+    fn build_cache(&self, content: &str) -> CacheBuilder<'_>;
 
     /// Execute a query. Called by [`QueryBuilder::run`]; not intended to be
     /// called directly.
@@ -151,7 +153,7 @@ pub trait LlmClient: Send + Sync {
         prompt: &str,
         attachments: &[Attachment],
         cache: Option<&CacheResult>,
-    ) -> BoxFuture<Result<String, LlmError>>;
+    ) -> BoxFuture<'_, Result<String, LlmError>>;
 
     /// Execute a cache build. Called by [`CacheBuilder::build`]; not intended
     /// to be called directly.
@@ -159,5 +161,5 @@ pub trait LlmClient: Send + Sync {
         &self,
         content: &str,
         attachments: &[Attachment],
-    ) -> BoxFuture<Result<CacheResult, LlmError>>;
+    ) -> BoxFuture<'_, Result<CacheResult, LlmError>>;
 }
