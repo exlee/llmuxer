@@ -140,7 +140,7 @@ impl LlmClientBuilder {
     pub fn build(self) -> Result<Box<dyn LlmClient>, LlmError> {
         use crate::providers::{
             anthropic::AnthropicProvider, gemini::GeminiProvider, ollama::OllamaProvider,
-            openai::OpenAiProvider,
+            openai::OpenAiProvider, openrouter::OpenRouterProvider,
         };
 
         let provider = self
@@ -187,6 +187,7 @@ impl LlmClientBuilder {
             Provider::Anthropic => Ok(Box::new(AnthropicProvider::new(config)?)),
             Provider::Gemini => Ok(Box::new(GeminiProvider::new(config)?)),
             Provider::OpenAI => Ok(Box::new(OpenAiProvider::new(config)?)),
+            Provider::OpenRouter => Ok(Box::new(OpenRouterProvider::new(config)?)),
             Provider::Ollama => Ok(Box::new(OllamaProvider::new(config)?)),
         }
     }

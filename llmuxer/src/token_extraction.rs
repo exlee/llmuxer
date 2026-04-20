@@ -68,6 +68,20 @@ pub fn extract_gemini(parsed: &Value) -> TokenUsage {
     }
 }
 
+/// Extract token usage from an OpenRouter API response.
+///
+/// OpenRouter uses the same response shape as OpenAI:
+/// ```json
+/// { "usage": {
+///     "prompt_tokens": 25, "completion_tokens": 150, "total_tokens": 175,
+///     "prompt_tokens_details": { "cached_tokens": 0 },
+///     "completion_tokens_details": { "reasoning_tokens": 0 }
+/// } }
+/// ```
+pub fn extract_openrouter(parsed: &Value) -> TokenUsage {
+    extract_openai(parsed)
+}
+
 /// Extract token usage from an Ollama API response.
 ///
 /// Ollama returns top-level counters:

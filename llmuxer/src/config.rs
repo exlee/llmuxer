@@ -6,6 +6,7 @@ pub enum Provider {
     Anthropic,
     Gemini,
     OpenAI,
+    OpenRouter,
     Ollama,
 }
 
@@ -16,6 +17,7 @@ impl Provider {
             Provider::Anthropic => "Anthropic",
             Provider::Gemini => "Gemini",
             Provider::OpenAI => "OpenAI",
+            Provider::OpenRouter => "OpenRouter",
             Provider::Ollama => "Ollama",
         }
     }
@@ -26,6 +28,7 @@ impl Provider {
             Provider::Anthropic => "claude-sonnet-4-20250514",
             Provider::Gemini => "gemini-2.5-flash",
             Provider::OpenAI => "gpt-4o-mini",
+            Provider::OpenRouter => "openai/gpt-4o-mini",
             Provider::Ollama => "llama3",
         }
     }
@@ -36,6 +39,7 @@ impl Provider {
             Provider::Anthropic => 8192,
             Provider::Gemini => 8192,
             Provider::OpenAI => 4096,
+            Provider::OpenRouter => 4096,
             Provider::Ollama => 4096,
         }
     }
@@ -49,7 +53,7 @@ impl Provider {
     pub fn supports_thinking(&self) -> bool {
         matches!(
             self,
-            Provider::Anthropic | Provider::Gemini | Provider::OpenAI
+            Provider::Anthropic | Provider::Gemini | Provider::OpenAI | Provider::OpenRouter
         )
     }
 
@@ -57,7 +61,7 @@ impl Provider {
     pub fn supports_caching(&self) -> bool {
         matches!(
             self,
-            Provider::Anthropic | Provider::Gemini | Provider::OpenAI
+            Provider::Anthropic | Provider::Gemini | Provider::OpenAI | Provider::OpenRouter
         )
     }
 }
