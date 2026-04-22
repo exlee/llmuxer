@@ -155,7 +155,7 @@ impl LlmClient for OllamaClient<reqwest::blocking::Client> {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        _cache: Option<&CacheResult>,
+        _cache: Option<CacheResult>,
     ) -> Result<String, LlmError> {
         self.send_and_extract(self.build_body(prompt, attachments)?)
     }
@@ -164,7 +164,7 @@ impl LlmClient for OllamaClient<reqwest::blocking::Client> {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        _cache: Option<&CacheResult>,
+        _cache: Option<CacheResult>,
     ) -> Result<WithTokenUsage<String>, LlmError> {
         let body = self.build_body(prompt, attachments)?;
         let (parsed, raw) = self.send_request(body)?;
@@ -253,7 +253,7 @@ impl LlmClient for OllamaClient<reqwest::Client> {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        _cache: Option<&CacheResult>,
+        _cache: Option<CacheResult>,
     ) -> BoxFuture<'_, Result<String, LlmError>> {
         let prompt = prompt.to_string();
         let attachments = attachments.to_vec();
@@ -268,7 +268,7 @@ impl LlmClient for OllamaClient<reqwest::Client> {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        _cache: Option<&CacheResult>,
+        _cache: Option<CacheResult>,
     ) -> BoxFuture<'_, Result<WithTokenUsage<String>, LlmError>> {
         let prompt = prompt.to_string();
         let attachments = attachments.to_vec();

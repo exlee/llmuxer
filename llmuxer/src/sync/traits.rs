@@ -7,13 +7,14 @@ use crate::{attachment::Attachment, error::LlmError, token_usage::WithTokenUsage
 ///
 /// Constructed by [`LlmClient::query`]; not constructed directly.
 ///
-/// The lifetime `'c` is tied to the `&'c dyn LlmClient` and the optional
-/// `&'c CacheResult`, keeping the builder object-safe with no heap allocation.
+/// The lifetime `'c` is tied to the `&'c dyn LlmClient`, keeping the
+/// builder object-safe with no heap allocation. The cache is owned so it
+/// can outlive the client that produced it.
 pub struct QueryBuilder<'c> {
     client: &'c dyn LlmClient,
     prompt: String,
     attachments: Vec<Attachment>,
-    cache: Option<&'c CacheResult>,
+    cache: Option<CacheResult>,
     require_cache: bool,
 }
 
@@ -42,11 +43,9 @@ impl<'c> QueryBuilder<'c> {
 
     /// Attach an existing cache result. Ignored if `Unsupported` unless
     /// [`require_cache`](Self::require_cache) is set.
-    pub fn cache(self, c: &'c CacheResult) -> Self {
-        Self {
-            cache: Some(c),
-            ..self
-        }
+    pub fn cache(mut self, c: CacheResult) -> Self {
+        self.cache = Some(c);
+        self
     }
 
     /// If set, [`run`](Self::run) returns
@@ -62,7 +61,7 @@ impl<'c> QueryBuilder<'c> {
     /// Execute the query, returning raw response text.
     pub fn run(self) -> Result<String, LlmError> {
         if self.require_cache {
-            match self.cache {
+            match &self.cache {
                 None | Some(CacheResult::Unsupported) => return Err(LlmError::CacheRequired),
                 Some(CacheResult::Key(_)) => {}
             }
@@ -107,7 +106,7 @@ pub struct QueryBuilderWithTokens<'c> {
     client: &'c dyn LlmClient,
     prompt: String,
     attachments: Vec<Attachment>,
-    cache: Option<&'c CacheResult>,
+    cache: Option<CacheResult>,
     require_cache: bool,
 }
 
@@ -126,11 +125,9 @@ impl<'c> QueryBuilderWithTokens<'c> {
 
     /// Attach an existing cache result. Ignored if `Unsupported` unless
     /// [`require_cache`](Self::require_cache) is set.
-    pub fn cache(self, c: &'c CacheResult) -> Self {
-        Self {
-            cache: Some(c),
-            ..self
-        }
+    pub fn cache(mut self, c: CacheResult) -> Self {
+        self.cache = Some(c);
+        self
     }
 
     /// If set, [`run`](Self::run) returns
@@ -147,7 +144,7 @@ impl<'c> QueryBuilderWithTokens<'c> {
     /// usage reported by the provider.
     pub fn run(self) -> Result<WithTokenUsage<String>, LlmError> {
         if self.require_cache {
-            match self.cache {
+            match &self.cache {
                 None | Some(CacheResult::Unsupported) => return Err(LlmError::CacheRequired),
                 Some(CacheResult::Key(_)) => {}
             }
@@ -227,7 +224,7 @@ pub trait LlmClient: Send + Sync {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        cache: Option<&CacheResult>,
+        cache: Option<CacheResult>,
     ) -> Result<String, LlmError>;
 
     /// Execute a query and return token usage alongside the response text.
@@ -242,7 +239,7 @@ pub trait LlmClient: Send + Sync {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        cache: Option<&CacheResult>,
+        cache: Option<CacheResult>,
     ) -> Result<WithTokenUsage<String>, LlmError> {
         let result = self.execute_query(prompt, attachments, cache)?;
         Ok(WithTokenUsage {

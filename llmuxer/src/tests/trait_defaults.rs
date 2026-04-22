@@ -59,7 +59,7 @@ mod tests {
             &self,
             _prompt: &str,
             _attachments: &[Attachment],
-            _cache: Option<&CacheResult>,
+            _cache: Option<CacheResult>,
         ) -> Result<String, LlmError> {
             Ok(self.0.clone())
         }
@@ -69,7 +69,7 @@ mod tests {
             &self,
             _prompt: &str,
             _attachments: &[Attachment],
-            _cache: Option<&CacheResult>,
+            _cache: Option<CacheResult>,
         ) -> BoxFuture<'_, Result<String, LlmError>> {
             let result = self.0.clone();
             Box::pin(async move { Ok(result) })
@@ -114,9 +114,9 @@ mod tests {
             &self,
             _prompt: &str,
             _attachments: &[Attachment],
-            cache: Option<&CacheResult>,
+            cache: Option<CacheResult>,
         ) -> Result<String, LlmError> {
-            match cache {
+            match &cache {
                 Some(CacheResult::Key(id)) => Ok(format!("cached:{id}")),
                 _ => Ok("fallback".into()),
             }
@@ -127,9 +127,9 @@ mod tests {
             &self,
             _prompt: &str,
             _attachments: &[Attachment],
-            cache: Option<&CacheResult>,
+            cache: Option<CacheResult>,
         ) -> BoxFuture<'_, Result<String, LlmError>> {
-            let result = match cache {
+            let result = match &cache {
                 Some(CacheResult::Key(id)) => format!("cached:{id}"),
                 _ => "fallback".into(),
             };
@@ -168,16 +168,14 @@ mod tests {
     #[test]
     fn run_with_unsupported_cache_falls_back() {
         let client = CacheAware;
-        let cache = CacheResult::Unsupported;
-        let result = run_query(client.query("ping").cache(&cache)).unwrap();
+        let result = run_query(client.query("ping").cache(CacheResult::Unsupported)).unwrap();
         assert_eq!(result, "fallback");
     }
 
     #[test]
     fn run_with_cache_key_uses_cache() {
         let client = CacheAware;
-        let cache = CacheResult::Key("abc123".into());
-        let result = run_query(client.query("ping").cache(&cache)).unwrap();
+        let result = run_query(client.query("ping").cache(CacheResult::Key("abc123".into()))).unwrap();
         assert_eq!(result, "cached:abc123");
     }
 
@@ -192,15 +190,14 @@ mod tests {
     fn require_cache_errors_when_cache_is_unsupported() {
         let client = CacheAware;
         let cache = CacheResult::Unsupported;
-        let err = run_query(client.query("ping").cache(&cache).require_cache()).unwrap_err();
+        let err = run_query(client.query("ping").cache(cache).require_cache()).unwrap_err();
         assert!(matches!(err, LlmError::CacheRequired));
     }
 
     #[test]
     fn require_cache_succeeds_with_key() {
         let client = CacheAware;
-        let cache = CacheResult::Key("key".into());
-        let result = run_query(client.query("ping").cache(&cache).require_cache()).unwrap();
+        let result = run_query(client.query("ping").cache(CacheResult::Key("key".into())).require_cache()).unwrap();
         assert_eq!(result, "cached:key");
     }
 

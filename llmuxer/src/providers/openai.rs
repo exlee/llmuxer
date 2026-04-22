@@ -182,9 +182,9 @@ impl LlmClient for OpenAiClient<reqwest::blocking::Client> {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        cache: Option<&CacheResult>,
+        cache: Option<CacheResult>,
     ) -> Result<String, LlmError> {
-        let prefix = match cache {
+        let prefix = match &cache {
             Some(CacheResult::Key(id)) => Some(id.as_str()),
             _ => None,
         };
@@ -195,9 +195,9 @@ impl LlmClient for OpenAiClient<reqwest::blocking::Client> {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        cache: Option<&CacheResult>,
+        cache: Option<CacheResult>,
     ) -> Result<WithTokenUsage<String>, LlmError> {
-        let prefix = match cache {
+        let prefix = match &cache {
             Some(CacheResult::Key(id)) => Some(id.as_str()),
             _ => None,
         };
@@ -294,17 +294,16 @@ impl LlmClient for OpenAiClient<reqwest::Client> {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        cache: Option<&CacheResult>,
+        cache: Option<CacheResult>,
     ) -> BoxFuture<'_, Result<String, LlmError>> {
         let prompt = prompt.to_string();
         let attachments = attachments.to_vec();
-        let cache_key = cache.and_then(|c| match c {
-            CacheResult::Key(id) => Some(id.clone()),
-            _ => None,
-        });
 
         Box::pin(async move {
-            let prefix = cache_key.as_deref();
+            let prefix = match &cache {
+                Some(CacheResult::Key(id)) => Some(id.as_str()),
+                _ => None,
+            };
             self.send_and_extract(self.build_body(&prompt, &attachments, prefix)?)
                 .await
         })
@@ -314,17 +313,16 @@ impl LlmClient for OpenAiClient<reqwest::Client> {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        cache: Option<&CacheResult>,
+        cache: Option<CacheResult>,
     ) -> BoxFuture<'_, Result<WithTokenUsage<String>, LlmError>> {
         let prompt = prompt.to_string();
         let attachments = attachments.to_vec();
-        let cache_key = cache.and_then(|c| match c {
-            CacheResult::Key(id) => Some(id.clone()),
-            _ => None,
-        });
 
         Box::pin(async move {
-            let prefix = cache_key.as_deref();
+            let prefix = match &cache {
+                Some(CacheResult::Key(id)) => Some(id.as_str()),
+                _ => None,
+            };
             let body = self.build_body(&prompt, &attachments, prefix)?;
             let (parsed, raw) = self.send_request(body).await?;
             let token_usage = token_extraction::extract_openai(&parsed);

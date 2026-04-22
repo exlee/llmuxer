@@ -173,9 +173,9 @@ impl LlmClient for GeminiClient<reqwest::blocking::Client> {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        cache: Option<&CacheResult>,
+        cache: Option<CacheResult>,
     ) -> Result<String, LlmError> {
-        let body = self.build_body(prompt, attachments, cache)?;
+        let body = self.build_body(prompt, attachments, cache.as_ref())?;
         self.send_and_extract(self.generate_url(), body)
     }
 
@@ -183,9 +183,9 @@ impl LlmClient for GeminiClient<reqwest::blocking::Client> {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        cache: Option<&CacheResult>,
+        cache: Option<CacheResult>,
     ) -> Result<WithTokenUsage<String>, LlmError> {
-        let body = self.build_body(prompt, attachments, cache)?;
+        let body = self.build_body(prompt, attachments, cache.as_ref())?;
         let url = self.generate_url();
         let (parsed, raw) = self.send_request(url, body)?;
         let token_usage = token_extraction::extract_gemini(&parsed);
@@ -317,11 +317,10 @@ impl LlmClient for GeminiClient<reqwest::Client> {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        cache: Option<&CacheResult>,
+        cache: Option<CacheResult>,
     ) -> BoxFuture<'_, Result<String, LlmError>> {
         let prompt = prompt.to_string();
         let attachments = attachments.to_vec();
-        let cache = cache.cloned();
 
         Box::pin(async move {
             let body = self.build_body(&prompt, &attachments, cache.as_ref())?;
@@ -333,11 +332,10 @@ impl LlmClient for GeminiClient<reqwest::Client> {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        cache: Option<&CacheResult>,
+        cache: Option<CacheResult>,
     ) -> BoxFuture<'_, Result<WithTokenUsage<String>, LlmError>> {
         let prompt = prompt.to_string();
         let attachments = attachments.to_vec();
-        let cache = cache.cloned();
 
         Box::pin(async move {
             let body = self.build_body(&prompt, &attachments, cache.as_ref())?;

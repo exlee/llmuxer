@@ -238,9 +238,9 @@ impl LlmClient for AnthropicClient<reqwest::blocking::Client> {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        cache: Option<&CacheResult>,
+        cache: Option<CacheResult>,
     ) -> Result<String, LlmError> {
-        let cache_id = match cache {
+        let cache_id = match &cache {
             Some(CacheResult::Key(id)) => Some(id.as_str()),
             _ => None,
         };
@@ -251,9 +251,9 @@ impl LlmClient for AnthropicClient<reqwest::blocking::Client> {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        cache: Option<&CacheResult>,
+        cache: Option<CacheResult>,
     ) -> Result<WithTokenUsage<String>, LlmError> {
-        let cache_id = match cache {
+        let cache_id = match &cache {
             Some(CacheResult::Key(id)) => Some(id.as_str()),
             _ => None,
         };
@@ -343,17 +343,16 @@ impl LlmClient for AnthropicClient<reqwest::Client> {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        cache: Option<&CacheResult>,
+        cache: Option<CacheResult>,
     ) -> BoxFuture<'_, Result<String, LlmError>> {
         let prompt = prompt.to_owned();
         let attachments = attachments.to_vec();
-        let cache_key = cache.and_then(|c| match c {
-            CacheResult::Key(id) => Some(id.clone()),
-            _ => None,
-        });
 
         Box::pin(async move {
-            let cache_id = cache_key.as_deref();
+            let cache_id = match &cache {
+                Some(CacheResult::Key(id)) => Some(id.as_str()),
+                _ => None,
+            };
             let body = self.build_body(&prompt, &attachments, cache_id)?;
             self.send_and_extract(body).await
         })
@@ -363,17 +362,16 @@ impl LlmClient for AnthropicClient<reqwest::Client> {
         &self,
         prompt: &str,
         attachments: &[Attachment],
-        cache: Option<&CacheResult>,
+        cache: Option<CacheResult>,
     ) -> BoxFuture<'_, Result<WithTokenUsage<String>, LlmError>> {
         let prompt = prompt.to_owned();
         let attachments = attachments.to_vec();
-        let cache_key = cache.and_then(|c| match c {
-            CacheResult::Key(id) => Some(id.clone()),
-            _ => None,
-        });
 
         Box::pin(async move {
-            let cache_id = cache_key.as_deref();
+            let cache_id = match &cache {
+                Some(CacheResult::Key(id)) => Some(id.as_str()),
+                _ => None,
+            };
             let body = self.build_body(&prompt, &attachments, cache_id)?;
             let (parsed, raw) = self.send_request(body).await?;
             let token_usage = token_extraction::extract_anthropic(&parsed);
