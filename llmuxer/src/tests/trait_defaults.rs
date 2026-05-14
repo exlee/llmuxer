@@ -175,7 +175,12 @@ mod tests {
     #[test]
     fn run_with_cache_key_uses_cache() {
         let client = CacheAware;
-        let result = run_query(client.query("ping").cache(CacheResult::Key("abc123".into()))).unwrap();
+        let result = run_query(
+            client
+                .query("ping")
+                .cache(CacheResult::Key("abc123".into())),
+        )
+        .unwrap();
         assert_eq!(result, "cached:abc123");
     }
 
@@ -197,7 +202,13 @@ mod tests {
     #[test]
     fn require_cache_succeeds_with_key() {
         let client = CacheAware;
-        let result = run_query(client.query("ping").cache(CacheResult::Key("key".into())).require_cache()).unwrap();
+        let result = run_query(
+            client
+                .query("ping")
+                .cache(CacheResult::Key("key".into()))
+                .require_cache(),
+        )
+        .unwrap();
         assert_eq!(result, "cached:key");
     }
 

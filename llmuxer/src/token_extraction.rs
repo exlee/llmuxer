@@ -131,9 +131,7 @@ pub fn extract_llamacpp(parsed: &Value) -> TokenUsage {
         .or_else(|| parsed["usage"]["completion_tokens"].as_u64())
         .map(|n| n as usize);
 
-    let total_token_count = parsed["usage"]["total_tokens"]
-        .as_u64()
-        .map(|n| n as usize);
+    let total_token_count = parsed["usage"]["total_tokens"].as_u64().map(|n| n as usize);
 
     TokenUsage {
         prompt_token_count,

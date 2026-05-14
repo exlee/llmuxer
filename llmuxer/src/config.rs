@@ -64,7 +64,10 @@ impl Provider {
     pub fn supports_thinking(&self) -> bool {
         matches!(
             self,
-            Provider::Anthropic | Provider::Gemini | Provider::OpenAI | Provider::OpenRouter
+            Provider::Anthropic
+                | Provider::Gemini
+                | Provider::OpenAI
+                | Provider::OpenRouter
                 | Provider::LlamaCpp
         )
     }

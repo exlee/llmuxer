@@ -46,11 +46,7 @@ impl<C> OpenRouterClient<C> {
                     "image_url": {"url": data_url}
                 }));
             } else {
-                let filename = att
-                    .label
-                    .as_deref()
-                    .unwrap_or("attachment")
-                    .to_string();
+                let filename = att.label.as_deref().unwrap_or("attachment").to_string();
                 let data_url = format!("data:{mime};base64,{}", B64.encode(&bytes));
                 parts.push(json!({
                     "type": "file",
@@ -390,7 +386,10 @@ mod tests {
         ] {
             let client = make_client(true, effort);
             let body = client.build_body("hello", &[], None).unwrap();
-            assert_eq!(body["reasoning"]["effort"], expected, "failed for {effort:?}");
+            assert_eq!(
+                body["reasoning"]["effort"], expected,
+                "failed for {effort:?}"
+            );
         }
     }
 
@@ -404,9 +403,7 @@ mod tests {
     #[test]
     fn cache_key_appended_to_system_message() {
         let client = make_client(false, ReasoningEffort::Medium);
-        let body = client
-            .build_body("hello", &[], Some("cache-xyz"))
-            .unwrap();
+        let body = client.build_body("hello", &[], Some("cache-xyz")).unwrap();
         let sys = body["messages"][0]["content"].as_str().unwrap();
         assert!(sys.contains("You are helpful."));
         assert!(sys.contains("cache-xyz"));

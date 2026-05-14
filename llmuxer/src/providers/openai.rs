@@ -398,9 +398,7 @@ mod tests {
     #[test]
     fn cache_key_appended_to_system_message() {
         let client = make_client(false, ReasoningEffort::Medium);
-        let body = client
-            .build_body("hello", &[], Some("cache-abc"))
-            .unwrap();
+        let body = client.build_body("hello", &[], Some("cache-abc")).unwrap();
         let sys = body["messages"][0]["content"].as_str().unwrap();
         assert!(sys.contains("You are helpful."));
         assert!(sys.contains("cache-abc"));

@@ -209,11 +209,7 @@ impl LlmClientBuilder {
             false
         };
 
-        let thinking_budget = if thinking {
-            self.thinking_budget
-        } else {
-            None
-        };
+        let thinking_budget = if thinking { self.thinking_budget } else { None };
 
         let config = ClientConfig {
             api_key: self.api_key.unwrap_or_default(),

@@ -81,7 +81,6 @@ impl<'c> QueryBuilder<'c> {
         })
     }
 
-
     /// Convert this builder into one that also returns token usage
     /// information from the provider.
     ///
