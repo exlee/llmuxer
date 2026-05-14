@@ -23,6 +23,7 @@ pub struct LlamaCppClient<C> {
     model: String,
     instruction: String,
     max_tokens: u32,
+    thinking: bool,
     response_shape: ResponseShape,
     http: C,
 }
@@ -50,6 +51,13 @@ impl<C> LlamaCppClient<C> {
                 {"role": "user", "content": prompt}
             ]
         });
+
+        // When thinking is disabled, explicitly turn off reasoning parsing.
+        // When enabled, omit the field so the server uses its default (auto-detect
+        // from the model's chat template), which is the desired behaviour.
+        if !self.thinking {
+            body["reasoning_format"] = json!("none");
+        }
 
         match &self.response_shape {
             ResponseShape::Text => {}
@@ -95,6 +103,7 @@ impl LlamaCppClient<reqwest::blocking::Client> {
             model: config.model,
             instruction: config.instruction,
             max_tokens: config.max_tokens,
+            thinking: config.thinking,
             response_shape: config.response_shape,
             http: reqwest::blocking::Client::builder()
                 .timeout(config.timeout)
@@ -196,6 +205,7 @@ impl LlamaCppClient<reqwest::Client> {
             model: config.model,
             instruction: config.instruction,
             max_tokens: config.max_tokens,
+            thinking: config.thinking,
             response_shape: config.response_shape,
             http: reqwest::Client::builder().timeout(config.timeout).build()?,
         })

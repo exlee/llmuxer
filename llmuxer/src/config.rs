@@ -65,6 +65,7 @@ impl Provider {
         matches!(
             self,
             Provider::Anthropic | Provider::Gemini | Provider::OpenAI | Provider::OpenRouter
+                | Provider::LlamaCpp
         )
     }
 
