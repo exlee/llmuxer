@@ -31,6 +31,5 @@ pub use traits::{CacheBuilder, LlmClient, QueryBuilder, QueryBuilderWithTokens};
 mod tests {
     mod builder;
     mod config;
-    mod provider;
     mod trait_defaults;
 }

@@ -382,24 +382,16 @@ mod tests {
     }
 
     #[test]
-    fn reasoning_effort_low() {
-        let client = make_client(true, ReasoningEffort::Low);
-        let body = client.build_body("hello", &[], None).unwrap();
-        assert_eq!(body["reasoning"]["effort"], "low");
-    }
-
-    #[test]
-    fn reasoning_effort_medium() {
-        let client = make_client(true, ReasoningEffort::Medium);
-        let body = client.build_body("hello", &[], None).unwrap();
-        assert_eq!(body["reasoning"]["effort"], "medium");
-    }
-
-    #[test]
-    fn reasoning_effort_high() {
-        let client = make_client(true, ReasoningEffort::High);
-        let body = client.build_body("hello", &[], None).unwrap();
-        assert_eq!(body["reasoning"]["effort"], "high");
+    fn reasoning_effort_in_nested_object() {
+        for (effort, expected) in [
+            (ReasoningEffort::Low, "low"),
+            (ReasoningEffort::Medium, "medium"),
+            (ReasoningEffort::High, "high"),
+        ] {
+            let client = make_client(true, effort);
+            let body = client.build_body("hello", &[], None).unwrap();
+            assert_eq!(body["reasoning"]["effort"], expected, "failed for {effort:?}");
+        }
     }
 
     #[test]
@@ -407,5 +399,24 @@ mod tests {
         let client = make_client(false, ReasoningEffort::High);
         let body = client.build_body("hello", &[], None).unwrap();
         assert!(body.get("reasoning").is_none());
+    }
+
+    #[test]
+    fn cache_key_appended_to_system_message() {
+        let client = make_client(false, ReasoningEffort::Medium);
+        let body = client
+            .build_body("hello", &[], Some("cache-xyz"))
+            .unwrap();
+        let sys = body["messages"][0]["content"].as_str().unwrap();
+        assert!(sys.contains("You are helpful."));
+        assert!(sys.contains("cache-xyz"));
+    }
+
+    #[test]
+    fn no_cache_key_uses_plain_instruction() {
+        let client = make_client(false, ReasoningEffort::Medium);
+        let body = client.build_body("hello", &[], None).unwrap();
+        let sys = body["messages"][0]["content"].as_str().unwrap();
+        assert_eq!(sys, "You are helpful.");
     }
 }

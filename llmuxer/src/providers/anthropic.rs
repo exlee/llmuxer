@@ -423,7 +423,7 @@ mod tests {
     }
 
     #[test]
-    fn thinking_uses_explicit_budget() {
+    fn thinking_with_explicit_budget() {
         let client = make_client(true, Some(2048));
         let body = client.build_body("hello", &[], None).unwrap();
         assert_eq!(body["thinking"]["type"], "enabled");
@@ -431,18 +431,17 @@ mod tests {
     }
 
     #[test]
-    fn thinking_uses_default_budget_when_none() {
+    fn thinking_default_budget_formula() {
         let client = make_client(true, None);
         let body = client.build_body("hello", &[], None).unwrap();
-        assert_eq!(body["thinking"]["type"], "enabled");
         // default = (max_tokens / 2).max(1024) = (4096 / 2).max(1024) = 2048
         assert_eq!(body["thinking"]["budget_tokens"], 2048);
     }
 
     #[test]
-    fn thinking_default_budget_floor() {
+    fn thinking_budget_floors_at_1024() {
         let mut client = make_client(true, None);
-        client.max_tokens = 512; // below floor
+        client.max_tokens = 512;
         let body = client.build_body("hello", &[], None).unwrap();
         assert_eq!(body["thinking"]["budget_tokens"], 1024);
     }
@@ -452,5 +451,27 @@ mod tests {
         let client = make_client(false, None);
         let body = client.build_body("hello", &[], None).unwrap();
         assert!(body.get("thinking").is_none());
+    }
+
+    #[test]
+    fn cache_key_creates_structured_system_with_cache_control() {
+        let client = make_client(false, None);
+        let body = client
+            .build_body("hello", &[], Some("cached-context"))
+            .unwrap();
+        let sys = &body["system"];
+        // Should be an array with two elements: instruction + cached text with ephemeral
+        assert_eq!(sys.as_array().unwrap().len(), 2);
+        assert_eq!(sys[0]["type"], "text");
+        assert_eq!(sys[0]["text"], "You are helpful.");
+        assert_eq!(sys[1]["text"], "cached-context");
+        assert_eq!(sys[1]["cache_control"]["type"], "ephemeral");
+    }
+
+    #[test]
+    fn no_cache_key_uses_plain_string_system() {
+        let client = make_client(false, None);
+        let body = client.build_body("hello", &[], None).unwrap();
+        assert_eq!(body["system"], "You are helpful.");
     }
 }
