@@ -14,6 +14,18 @@ pub enum ResponseShape {
     Json(serde_json::Value),
 }
 
+/// Controls how much reasoning effort the model should apply.
+///
+/// Only meaningful for providers that support a configurable reasoning level
+/// (OpenAI, OpenRouter). Ignored by others.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ReasoningEffort {
+    Low,
+    #[default]
+    Medium,
+    High,
+}
+
 /// Internal configuration passed from builder to provider constructors.
 pub(crate) struct ClientConfig {
     pub api_key: String,
@@ -23,6 +35,7 @@ pub(crate) struct ClientConfig {
     pub max_tokens: u32,
     pub thinking: bool,
     pub thinking_budget: Option<u32>,
+    pub reasoning_effort: ReasoningEffort,
     pub response_shape: ResponseShape,
     pub timeout: std::time::Duration,
 }
@@ -43,6 +56,7 @@ pub struct LlmClientBuilder {
     max_tokens: Option<u32>,
     thinking: Option<bool>,
     thinking_budget: Option<u32>,
+    reasoning_effort: Option<ReasoningEffort>,
     response_shape: Option<ResponseShape>,
     timeout: Option<std::time::Duration>,
 }
@@ -131,6 +145,16 @@ impl LlmClientBuilder {
         }
     }
 
+    /// Sets the reasoning effort level. Only meaningful for providers that
+    /// support a configurable reasoning level (OpenAI, OpenRouter). Ignored
+    /// by others. Defaults to [`ReasoningEffort::High`] when thinking is enabled.
+    pub fn reasoning_effort(self, e: ReasoningEffort) -> Self {
+        Self {
+            reasoning_effort: Some(e),
+            ..self
+        }
+    }
+
     /// Sets the expected output format. Defaults to [`ResponseShape::Text`].
     pub fn response_shape(self, r: ResponseShape) -> Self {
         Self {
@@ -199,6 +223,7 @@ impl LlmClientBuilder {
             max_tokens,
             thinking,
             thinking_budget,
+            reasoning_effort: self.reasoning_effort.unwrap_or_default(),
             response_shape: self.response_shape.unwrap_or(ResponseShape::Text),
             timeout: self.timeout.unwrap_or(std::time::Duration::from_secs(30)),
         };

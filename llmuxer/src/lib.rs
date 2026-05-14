@@ -20,7 +20,7 @@ pub use r#async::traits;
 pub use sync::traits;
 
 pub use attachment::{Attachment, AttachmentData};
-pub use builder::{LlmClientBuilder, ResponseShape};
+pub use builder::{LlmClientBuilder, ReasoningEffort, ResponseShape};
 pub use config::{LlmConfig, Provider};
 pub use error::LlmError;
 pub use shared::CacheResult;

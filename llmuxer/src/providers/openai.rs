@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 
 use crate::{
     attachment::Attachment,
-    builder::{ClientConfig, ResponseShape},
+    builder::{ClientConfig, ReasoningEffort, ResponseShape},
     error::LlmError,
     shared::CacheResult,
     token_extraction,
@@ -28,6 +28,7 @@ pub struct OpenAiClient<C> {
     thinking: bool,
     #[allow(dead_code)]
     thinking_budget: Option<u32>,
+    reasoning_effort: ReasoningEffort,
     response_shape: ResponseShape,
     http: C,
 }
@@ -80,7 +81,12 @@ impl<C> OpenAiClient<C> {
         });
 
         if self.thinking {
-            body["reasoning_effort"] = json!("high");
+            let effort = match self.reasoning_effort {
+                ReasoningEffort::Low => "low",
+                ReasoningEffort::Medium => "medium",
+                ReasoningEffort::High => "high",
+            };
+            body["reasoning_effort"] = json!(effort);
         }
 
         match &self.response_shape {
@@ -131,6 +137,7 @@ impl OpenAiClient<reqwest::blocking::Client> {
             max_tokens: config.max_tokens,
             thinking: config.thinking,
             thinking_budget: config.thinking_budget,
+            reasoning_effort: config.reasoning_effort,
             response_shape: config.response_shape,
             http: reqwest::blocking::Client::builder()
                 .timeout(config.timeout)
@@ -245,6 +252,7 @@ impl OpenAiClient<reqwest::Client> {
             max_tokens: config.max_tokens,
             thinking: config.thinking,
             thinking_budget: config.thinking_budget,
+            reasoning_effort: config.reasoning_effort,
             response_shape: config.response_shape,
             http: reqwest::Client::builder().timeout(config.timeout).build()?,
         })

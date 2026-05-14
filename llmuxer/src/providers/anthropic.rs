@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 
 use crate::{
     attachment::Attachment,
-    builder::{ClientConfig, ResponseShape},
+    builder::{ClientConfig, ReasoningEffort, ResponseShape},
     error::LlmError,
     shared::CacheResult,
     token_extraction,
@@ -27,6 +27,8 @@ pub struct AnthropicClient<C> {
     max_tokens: u32,
     thinking: bool,
     thinking_budget: Option<u32>,
+    #[allow(dead_code)]
+    reasoning_effort: ReasoningEffort,
     response_shape: ResponseShape,
     http: C,
 }
@@ -191,6 +193,7 @@ impl AnthropicClient<reqwest::blocking::Client> {
             max_tokens: config.max_tokens,
             thinking: config.thinking,
             thinking_budget: config.thinking_budget,
+            reasoning_effort: config.reasoning_effort,
             response_shape: config.response_shape,
             http: reqwest::blocking::Client::builder()
                 .timeout(config.timeout)
@@ -298,6 +301,7 @@ impl AnthropicClient<reqwest::Client> {
             max_tokens: config.max_tokens,
             thinking: config.thinking,
             thinking_budget: config.thinking_budget,
+            reasoning_effort: config.reasoning_effort,
             response_shape: config.response_shape,
             http: reqwest::Client::builder().timeout(config.timeout).build()?,
         })
