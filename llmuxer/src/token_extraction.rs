@@ -97,3 +97,49 @@ pub fn extract_ollama(parsed: &Value) -> TokenUsage {
         total_token_count: None,
     }
 }
+
+/// Extract token usage from a llama.cpp server OAI-compatible response.
+///
+/// The llama.cpp server returns a `timings` object alongside the OAI-standard
+/// `usage` object when queried via `/v1/chat/completions`:
+/// ```json
+/// {
+///   "usage": { "prompt_tokens": 25, "completion_tokens": 150, "total_tokens": 175 },
+///   "timings": {
+///     "prompt_n": 25, "cache_n": 10,
+///     "predicted_n": 150,
+///     "prompt_ms": 30.0, "predicted_ms": 600.0
+///   }
+/// }
+/// ```
+///
+/// We prefer the `timings` fields (they include cache info) and fall back to
+/// the standard `usage` object.
+pub fn extract_llamacpp(parsed: &Value) -> TokenUsage {
+    let timings = &parsed["timings"];
+
+    let prompt_token_count = timings["prompt_n"]
+        .as_u64()
+        .or_else(|| parsed["usage"]["prompt_tokens"].as_u64())
+        .map(|n| n as usize);
+
+    // cache_n = tokens reused from KV cache
+    let cached_content_token_count = timings["cache_n"].as_u64().map(|n| n as usize);
+
+    let output_token_count = timings["predicted_n"]
+        .as_u64()
+        .or_else(|| parsed["usage"]["completion_tokens"].as_u64())
+        .map(|n| n as usize);
+
+    let total_token_count = parsed["usage"]["total_tokens"]
+        .as_u64()
+        .map(|n| n as usize);
+
+    TokenUsage {
+        prompt_token_count,
+        cached_content_token_count,
+        thoughts_token_count: None,
+        output_token_count,
+        total_token_count,
+    }
+}

@@ -87,7 +87,7 @@ impl LlmConfigWidget {
                                 ui.end_row();
                             }
 
-                            if matches!(self.selected, Provider::Ollama) {
+                            if matches!(self.selected, Provider::Ollama | Provider::LlamaCpp) {
                                 ui.label("Base URL");
                                 let mut url = draft.base_url.clone().unwrap_or_default();
                                 ui.add(
@@ -150,6 +150,8 @@ fn load_drafts() -> HashMap<Provider, LlmConfig> {
                 api_key: String::new(),
                 base_url: if matches!(provider, Provider::Ollama) {
                     Some("http://localhost:11434".into())
+                } else if matches!(provider, Provider::LlamaCpp) {
+                    Some("http://127.0.0.1:8080".into())
                 } else {
                     None
                 },
@@ -160,11 +162,13 @@ fn load_drafts() -> HashMap<Provider, LlmConfig> {
         .collect()
 }
 
-fn all_providers() -> [Provider; 4] {
+fn all_providers() -> [Provider; 6] {
     [
         Provider::Anthropic,
         Provider::Gemini,
         Provider::OpenAI,
+        Provider::OpenRouter,
         Provider::Ollama,
+        Provider::LlamaCpp,
     ]
 }

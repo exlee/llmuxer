@@ -8,6 +8,7 @@ pub enum Provider {
     OpenAI,
     OpenRouter,
     Ollama,
+    LlamaCpp,
 }
 
 impl Provider {
@@ -19,6 +20,7 @@ impl Provider {
             Provider::OpenAI => "OpenAI",
             Provider::OpenRouter => "OpenRouter",
             Provider::Ollama => "Ollama",
+            Provider::LlamaCpp => "llama.cpp",
         }
     }
 
@@ -30,6 +32,9 @@ impl Provider {
             Provider::OpenAI => "gpt-4o-mini",
             Provider::OpenRouter => "openai/gpt-4o-mini",
             Provider::Ollama => "llama3",
+            // llama.cpp uses whatever model is loaded on the server; empty string
+            // lets the server pick its loaded model.
+            Provider::LlamaCpp => "",
         }
     }
 
@@ -41,12 +46,18 @@ impl Provider {
             Provider::OpenAI => 4096,
             Provider::OpenRouter => 4096,
             Provider::Ollama => 4096,
+            Provider::LlamaCpp => 4096,
         }
     }
 
-    /// Whether an API key is required (false only for Ollama).
+    /// Whether an API key is required (false only for Ollama and llama.cpp).
     pub fn needs_key(&self) -> bool {
-        !matches!(self, Provider::Ollama)
+        !matches!(self, Provider::Ollama | Provider::LlamaCpp)
+    }
+
+    /// Whether an explicit base_url is required.
+    pub fn needs_base_url(&self) -> bool {
+        matches!(self, Provider::Ollama)
     }
 
     /// Whether extended thinking is supported.
