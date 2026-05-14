@@ -1,0 +1,7 @@
+[advisories]
+ignore = [
+    # rustls-webpki: reachable panic in CRL parsing — transitive via reqwest, no fix available yet
+    "RUSTSEC-2026-0104",
+    # paste: unmaintained — transitive via wgpu/eframe (llmuxer-egui only)
+    "RUSTSEC-2024-0436",
+]
