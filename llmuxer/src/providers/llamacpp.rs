@@ -305,3 +305,86 @@ impl LlmClient for LlamaCppClient<reqwest::Client> {
         Box::pin(async move { Ok(CacheResult::Unsupported) })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::builder::ReasoningEffort;
+
+    fn make_client(thinking: bool, shape: ResponseShape) -> LlamaCppClient<()> {
+        LlamaCppClient {
+            base_url: "http://127.0.0.1:8080".into(),
+            model: "test-model".into(),
+            instruction: "You are helpful.".into(),
+            max_tokens: 1024,
+            thinking,
+            thinking_budget: None,
+            reasoning_effort: ReasoningEffort::default(),
+            response_shape: shape,
+            http: (),
+        }
+    }
+
+    #[test]
+    fn body_contains_messages() {
+        let client = make_client(false, ResponseShape::Text);
+        let body = client.build_body("hello", &[]).unwrap();
+        assert_eq!(body["model"], "test-model");
+        assert_eq!(body["max_tokens"], 1024);
+        assert_eq!(body["messages"][0]["role"], "system");
+        assert_eq!(body["messages"][1]["role"], "user");
+        assert_eq!(body["messages"][1]["content"], "hello");
+    }
+
+    #[test]
+    fn thinking_off_sets_reasoning_format_none() {
+        let client = make_client(false, ResponseShape::Text);
+        let body = client.build_body("hello", &[]).unwrap();
+        assert_eq!(body["reasoning_format"], "none");
+    }
+
+    #[test]
+    fn thinking_on_omits_reasoning_format() {
+        let client = make_client(true, ResponseShape::Text);
+        let body = client.build_body("hello", &[]).unwrap();
+        assert!(body.get("reasoning_format").is_none());
+    }
+
+    #[test]
+    fn json_schema_sets_response_format() {
+        let schema = serde_json::json!({"type": "object", "properties": {"name": {"type": "string"}}});
+        let client = make_client(false, ResponseShape::Json(schema.clone()));
+        let body = client.build_body("hello", &[]).unwrap();
+        assert_eq!(body["response_format"]["type"], "json_schema");
+        assert_eq!(body["response_format"]["json_schema"]["schema"], schema);
+    }
+
+    #[test]
+    fn text_shape_has_no_response_format() {
+        let client = make_client(false, ResponseShape::Text);
+        let body = client.build_body("hello", &[]).unwrap();
+        assert!(body.get("response_format").is_none());
+    }
+
+    #[test]
+    fn extract_text_from_valid_response() {
+        let client = make_client(false, ResponseShape::Text);
+        let parsed = serde_json::json!({
+            "choices": [{ "message": { "content": "hello world" } }]
+        });
+        let text = client.extract_text(&parsed, "").unwrap();
+        assert_eq!(text, "hello world");
+    }
+
+    #[test]
+    fn extract_text_fails_on_missing_content() {
+        let client = make_client(false, ResponseShape::Text);
+        let parsed = serde_json::json!({ "choices": [{ "message": {} }] });
+        let raw = "{ \"choices\": [] }";
+        let err = client.extract_text(&parsed, raw).unwrap_err();
+        assert!(
+            matches!(err, LlmError::Deserialise { .. }),
+            "expected Deserialise error"
+        );
+    }
+}

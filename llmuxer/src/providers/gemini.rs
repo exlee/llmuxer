@@ -417,3 +417,45 @@ impl LlmClient for GeminiClient<reqwest::Client> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::builder::ReasoningEffort;
+
+    fn make_client(thinking: bool, thinking_budget: Option<u32>) -> GeminiClient<()> {
+        GeminiClient {
+            api_key: "test-key".into(),
+            base_url: "https://generativelanguage.googleapis.com".into(),
+            model: "gemini-2.5-flash".into(),
+            instruction: "You are helpful.".into(),
+            max_tokens: 4096,
+            thinking,
+            thinking_budget,
+            reasoning_effort: ReasoningEffort::default(),
+            response_shape: ResponseShape::Text,
+            http: (),
+        }
+    }
+
+    #[test]
+    fn thinking_uses_explicit_budget() {
+        let client = make_client(true, Some(5000));
+        let config = client.build_generation_config();
+        assert_eq!(config["thinkingConfig"]["thinkingBudget"], 5000);
+    }
+
+    #[test]
+    fn thinking_uses_unlimited_when_no_budget() {
+        let client = make_client(true, None);
+        let config = client.build_generation_config();
+        assert_eq!(config["thinkingConfig"]["thinkingBudget"], -1);
+    }
+
+    #[test]
+    fn thinking_off_omits_config() {
+        let client = make_client(false, None);
+        let config = client.build_generation_config();
+        assert!(config.get("thinkingConfig").is_none());
+    }
+}

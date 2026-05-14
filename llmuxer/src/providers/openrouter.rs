@@ -361,3 +361,51 @@ impl LlmClient for OpenRouterClient<reqwest::Client> {
         Box::pin(async move { Ok(CacheResult::Key(content)) })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_client(thinking: bool, effort: ReasoningEffort) -> OpenRouterClient<()> {
+        OpenRouterClient {
+            api_key: "sk-test".into(),
+            base_url: "https://openrouter.ai/api".into(),
+            model: "openai/gpt-4o-mini".into(),
+            instruction: "You are helpful.".into(),
+            max_tokens: 4096,
+            thinking,
+            thinking_budget: None,
+            reasoning_effort: effort,
+            response_shape: ResponseShape::Text,
+            http: (),
+        }
+    }
+
+    #[test]
+    fn reasoning_effort_low() {
+        let client = make_client(true, ReasoningEffort::Low);
+        let body = client.build_body("hello", &[], None).unwrap();
+        assert_eq!(body["reasoning"]["effort"], "low");
+    }
+
+    #[test]
+    fn reasoning_effort_medium() {
+        let client = make_client(true, ReasoningEffort::Medium);
+        let body = client.build_body("hello", &[], None).unwrap();
+        assert_eq!(body["reasoning"]["effort"], "medium");
+    }
+
+    #[test]
+    fn reasoning_effort_high() {
+        let client = make_client(true, ReasoningEffort::High);
+        let body = client.build_body("hello", &[], None).unwrap();
+        assert_eq!(body["reasoning"]["effort"], "high");
+    }
+
+    #[test]
+    fn thinking_off_omits_reasoning() {
+        let client = make_client(false, ReasoningEffort::High);
+        let body = client.build_body("hello", &[], None).unwrap();
+        assert!(body.get("reasoning").is_none());
+    }
+}

@@ -143,3 +143,79 @@ pub fn extract_llamacpp(parsed: &Value) -> TokenUsage {
         total_token_count,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn llamacpp_extracts_from_timings() {
+        let parsed = serde_json::json!({
+            "timings": {
+                "prompt_n": 100,
+                "cache_n": 40,
+                "predicted_n": 200,
+                "prompt_ms": 50.0,
+                "predicted_ms": 500.0
+            },
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 200,
+                "total_tokens": 300
+            }
+        });
+
+        let usage = extract_llamacpp(&parsed);
+        assert_eq!(usage.prompt_token_count, Some(100));
+        assert_eq!(usage.cached_content_token_count, Some(40));
+        assert_eq!(usage.output_token_count, Some(200));
+        assert_eq!(usage.total_token_count, Some(300));
+    }
+
+    #[test]
+    fn llamacpp_falls_back_to_usage_when_no_timings() {
+        let parsed = serde_json::json!({
+            "usage": {
+                "prompt_tokens": 50,
+                "completion_tokens": 80,
+                "total_tokens": 130
+            }
+        });
+
+        let usage = extract_llamacpp(&parsed);
+        assert_eq!(usage.prompt_token_count, Some(50));
+        assert_eq!(usage.cached_content_token_count, None);
+        assert_eq!(usage.output_token_count, Some(80));
+        assert_eq!(usage.total_token_count, Some(130));
+    }
+
+    #[test]
+    fn llamacpp_handles_empty_response() {
+        let parsed = serde_json::json!({});
+        let usage = extract_llamacpp(&parsed);
+        assert_eq!(usage.prompt_token_count, None);
+        assert_eq!(usage.cached_content_token_count, None);
+        assert_eq!(usage.output_token_count, None);
+        assert_eq!(usage.total_token_count, None);
+    }
+
+    #[test]
+    fn llamacpp_prefers_timings_over_usage() {
+        let parsed = serde_json::json!({
+            "timings": {
+                "prompt_n": 10,
+                "predicted_n": 20
+            },
+            "usage": {
+                "prompt_tokens": 999,
+                "completion_tokens": 888,
+                "total_tokens": 777
+            }
+        });
+
+        let usage = extract_llamacpp(&parsed);
+        assert_eq!(usage.prompt_token_count, Some(10)); // timings, not 999
+        assert_eq!(usage.output_token_count, Some(20)); // timings, not 888
+        assert_eq!(usage.total_token_count, Some(777)); // usage only (no timings equivalent)
+    }
+}

@@ -401,3 +401,56 @@ impl LlmClient for AnthropicClient<reqwest::Client> {
         Box::pin(async move { Ok(CacheResult::Key(content)) })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::builder::ReasoningEffort;
+
+    fn make_client(thinking: bool, thinking_budget: Option<u32>) -> AnthropicClient<()> {
+        AnthropicClient {
+            api_key: "sk-test".into(),
+            base_url: "https://api.anthropic.com".into(),
+            model: "claude-sonnet-4-20250514".into(),
+            instruction: "You are helpful.".into(),
+            max_tokens: 4096,
+            thinking,
+            thinking_budget,
+            reasoning_effort: ReasoningEffort::default(),
+            response_shape: ResponseShape::Text,
+            http: (),
+        }
+    }
+
+    #[test]
+    fn thinking_uses_explicit_budget() {
+        let client = make_client(true, Some(2048));
+        let body = client.build_body("hello", &[], None).unwrap();
+        assert_eq!(body["thinking"]["type"], "enabled");
+        assert_eq!(body["thinking"]["budget_tokens"], 2048);
+    }
+
+    #[test]
+    fn thinking_uses_default_budget_when_none() {
+        let client = make_client(true, None);
+        let body = client.build_body("hello", &[], None).unwrap();
+        assert_eq!(body["thinking"]["type"], "enabled");
+        // default = (max_tokens / 2).max(1024) = (4096 / 2).max(1024) = 2048
+        assert_eq!(body["thinking"]["budget_tokens"], 2048);
+    }
+
+    #[test]
+    fn thinking_default_budget_floor() {
+        let mut client = make_client(true, None);
+        client.max_tokens = 512; // below floor
+        let body = client.build_body("hello", &[], None).unwrap();
+        assert_eq!(body["thinking"]["budget_tokens"], 1024);
+    }
+
+    #[test]
+    fn thinking_off_omits_field() {
+        let client = make_client(false, None);
+        let body = client.build_body("hello", &[], None).unwrap();
+        assert!(body.get("thinking").is_none());
+    }
+}

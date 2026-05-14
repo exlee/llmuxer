@@ -19,4 +19,29 @@ mod tests {
         assert!(!Provider::Ollama.supports_caching());
         assert!(!Provider::Ollama.supports_thinking());
     }
+
+    #[test]
+    fn llamacpp_does_not_need_key() {
+        assert!(!Provider::LlamaCpp.needs_key());
+    }
+
+    #[test]
+    fn llamacpp_does_not_support_caching() {
+        assert!(!Provider::LlamaCpp.supports_caching());
+    }
+
+    #[test]
+    fn llamacpp_supports_thinking() {
+        assert!(Provider::LlamaCpp.supports_thinking());
+    }
+
+    #[test]
+    fn llamacpp_default_model_is_empty() {
+        assert_eq!(Provider::LlamaCpp.default_model(), "");
+    }
+
+    #[test]
+    fn llamacpp_label() {
+        assert_eq!(Provider::LlamaCpp.label(), "llama.cpp");
+    }
 }
