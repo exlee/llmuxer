@@ -22,6 +22,7 @@ pub(crate) struct ClientConfig {
     pub instruction: String,
     pub max_tokens: u32,
     pub thinking: bool,
+    pub thinking_budget: Option<u32>,
     pub response_shape: ResponseShape,
     pub timeout: std::time::Duration,
 }
@@ -41,6 +42,7 @@ pub struct LlmClientBuilder {
     instruction: Option<String>,
     max_tokens: Option<u32>,
     thinking: Option<bool>,
+    thinking_budget: Option<u32>,
     response_shape: Option<ResponseShape>,
     timeout: Option<std::time::Duration>,
 }
@@ -118,6 +120,17 @@ impl LlmClientBuilder {
         }
     }
 
+    /// Sets an explicit token budget for thinking/reasoning. Only meaningful
+    /// when [`thinking`](Self::thinking) is `true` and the provider supports
+    /// a numeric budget (Anthropic, Gemini). When `None`, the provider uses
+    /// its default budget.
+    pub fn thinking_budget(self, n: u32) -> Self {
+        Self {
+            thinking_budget: Some(n),
+            ..self
+        }
+    }
+
     /// Sets the expected output format. Defaults to [`ResponseShape::Text`].
     pub fn response_shape(self, r: ResponseShape) -> Self {
         Self {
@@ -172,6 +185,12 @@ impl LlmClientBuilder {
             false
         };
 
+        let thinking_budget = if thinking {
+            self.thinking_budget
+        } else {
+            None
+        };
+
         let config = ClientConfig {
             api_key: self.api_key.unwrap_or_default(),
             base_url: self.base_url,
@@ -179,6 +198,7 @@ impl LlmClientBuilder {
             instruction: self.instruction.unwrap_or_default(),
             max_tokens,
             thinking,
+            thinking_budget,
             response_shape: self.response_shape.unwrap_or(ResponseShape::Text),
             timeout: self.timeout.unwrap_or(std::time::Duration::from_secs(30)),
         };

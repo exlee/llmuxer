@@ -22,6 +22,8 @@ pub struct OpenRouterClient<C> {
     instruction: String,
     max_tokens: u32,
     thinking: bool,
+    #[allow(dead_code)]
+    thinking_budget: Option<u32>,
     response_shape: ResponseShape,
     http: C,
 }
@@ -132,6 +134,7 @@ impl OpenRouterClient<reqwest::blocking::Client> {
             instruction: config.instruction,
             max_tokens: config.max_tokens,
             thinking: config.thinking,
+            thinking_budget: config.thinking_budget,
             response_shape: config.response_shape,
             http: reqwest::blocking::Client::builder()
                 .timeout(config.timeout)
@@ -245,6 +248,7 @@ impl OpenRouterClient<reqwest::Client> {
             instruction: config.instruction,
             max_tokens: config.max_tokens,
             thinking: config.thinking,
+            thinking_budget: config.thinking_budget,
             response_shape: config.response_shape,
             http: reqwest::Client::builder().timeout(config.timeout).build()?,
         })

@@ -26,6 +26,7 @@ pub struct AnthropicClient<C> {
     instruction: String,
     max_tokens: u32,
     thinking: bool,
+    thinking_budget: Option<u32>,
     response_shape: ResponseShape,
     http: C,
 }
@@ -113,7 +114,9 @@ impl<C> AnthropicClient<C> {
         });
 
         if self.thinking {
-            let budget = (self.max_tokens / 2).max(1024);
+            let budget = self
+                .thinking_budget
+                .unwrap_or_else(|| (self.max_tokens / 2).max(1024));
             body["thinking"] = json!({"type": "enabled", "budget_tokens": budget});
         }
 
@@ -187,6 +190,7 @@ impl AnthropicClient<reqwest::blocking::Client> {
             instruction: config.instruction,
             max_tokens: config.max_tokens,
             thinking: config.thinking,
+            thinking_budget: config.thinking_budget,
             response_shape: config.response_shape,
             http: reqwest::blocking::Client::builder()
                 .timeout(config.timeout)
@@ -293,6 +297,7 @@ impl AnthropicClient<reqwest::Client> {
             instruction: config.instruction,
             max_tokens: config.max_tokens,
             thinking: config.thinking,
+            thinking_budget: config.thinking_budget,
             response_shape: config.response_shape,
             http: reqwest::Client::builder().timeout(config.timeout).build()?,
         })

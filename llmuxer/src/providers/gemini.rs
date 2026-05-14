@@ -26,6 +26,7 @@ pub struct GeminiClient<C> {
     instruction: String,
     max_tokens: u32,
     thinking: bool,
+    thinking_budget: Option<u32>,
     response_shape: ResponseShape,
     http: C,
 }
@@ -42,7 +43,8 @@ impl<C> GeminiClient<C> {
         let mut config = json!({"maxOutputTokens": self.max_tokens});
 
         if self.thinking {
-            config["thinkingConfig"] = json!({"thinkingBudget": -1});
+            let budget = self.thinking_budget.map(|b| b as i64).unwrap_or(-1);
+            config["thinkingConfig"] = json!({"thinkingBudget": budget});
         }
 
         match &self.response_shape {
@@ -123,6 +125,7 @@ impl GeminiClient<reqwest::blocking::Client> {
             instruction: config.instruction,
             max_tokens: config.max_tokens,
             thinking: config.thinking,
+            thinking_budget: config.thinking_budget,
             response_shape: config.response_shape,
             http: reqwest::blocking::Client::builder()
                 .timeout(config.timeout)
@@ -268,6 +271,7 @@ impl GeminiClient<reqwest::Client> {
             instruction: config.instruction,
             max_tokens: config.max_tokens,
             thinking: config.thinking,
+            thinking_budget: config.thinking_budget,
             response_shape: config.response_shape,
             http: reqwest::Client::builder().timeout(config.timeout).build()?,
         })
